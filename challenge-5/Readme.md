@@ -1,71 +1,60 @@
-
 ## Challenge 5
 
-This challenge is designed to help you practice Terraform concepts such as data sources, modularization, remote backends, and resource imports. Follow the tasks sequentially to complete the challenge.
+本挑战用于练习 data source、模块化、远程 backend 和资源 import 等 Terraform 概念。请按顺序完成任务。
 
-### Task 1 - Create Base Resources
+### 任务 1：创建基础资源
 
-1. Navigate to the `base-folder`.
-2. Run the following command to create the initial resources:
+1. 进入 `base-folder`。
+2. 运行以下命令创建初始资源：
 
 `terraform apply -auto-approve`
 
-### Task 2 - Define Data Source
+### 任务 2：定义 Data Source
 
-* Create a file named `datasource.tf` inside the `base-folder`.
+* 在 `base-folder` 中创建 `datasource.tf`。
+* 定义 data source，从自定义 VPC `challenge-5-vpc` 中获取名为 `subnet-subnet1` 和 `subnet-subnet2` 的两个子网 ID。
+* 使用名为 `subnet_ids` 的 output 显示获取到的子网 ID。
 
-* Define a data source to fetch the IDs of two subnets named `subnet-subnet1` and `subnet-subnet2` from custom VPC named `challenge-5-vpc`.
+### 任务 3：在自定义子网中创建 EC2 实例
 
-* Display the fetched subnet IDs as output values named `subnet_ids`
-
-### Task 3 - Create EC2 instances in Custom Subnets
-
-* Create a new file `ec2.tf` in the base-folder.
-
-* Define only a single `aws_instance` resource block. Use `for_each` iterate over data as necessary to create two EC2 instances
-
-  * One EC2 in `subnet-subnet1` (whose subnet id was fetched in Task 2).
-  * Second EC2 in `subnet-subnet2`(whose subnet id was fetched in Task 2).
+* 在 base-folder 中创建 `ec2.tf`。
+* 只定义一个 `aws_instance` resource block，并根据需要使用 `for_each` 遍历数据以创建两个 EC2 实例：
+  * 一个 EC2 位于 `subnet-subnet1`（子网 ID 来自任务 2）。
+  * 另一个 EC2 位于 `subnet-subnet2`（子网 ID 来自任务 2）。
 
 > [!NOTE]
-> You need to reference to subnet_id by querying data source. No hardcoding.
+> 必须通过查询 data source 引用 `subnet_id`，不得硬编码。
 
-### Task 4 - Create Security Group
+### 任务 4：创建 Security Group
 
-* Create a new file `sg.tf` in the base-folder.
+* 在 base-folder 中创建 `sg.tf`。
+* 定义一个 `aws_security_group` resource block，并使用 `for_each` 创建两个 Security Group：
+  * `app-1-sg`
+  * `app-2-sg`
+* 确保 Security Group 创建在 `challenge-5-vpc` 中。
 
-* Define a single `aws_security_group` resource block using `for_each` to create two security groups:
-   * app-1-sg.
-   * app-2-sg.
+### 任务 5：创建 Security Group Rule
 
-* Ensure the security groups are created in the `challenge-5-vpc`
+参考 `sg.csv` 的内容，并按照以下条件创建 Security Group Rule：
 
+1. 使用一个 `aws_vpc_security_group_ingress_rule` resource block，为 `app-1-sg` 创建入站规则。
+   * 如果 CSV 中的 `description` 为 `app-1`，则该规则必须关联到 `app-1-sg`。只处理入站规则，忽略出站规则。
 
-### Task 5 - Create  Security Group Rules
+2. 使用一个 `aws_vpc_security_group_egress_rule` resource block，为 `app-2-sg` 创建出站规则。
+   * 如果 CSV 中的 `description` 为 `app-2`，则该规则必须关联到 `app-2-sg`。只处理出站规则，忽略入站规则。
 
-Refer to the contents of the `sg.csv` file and create security group rule based on following conditions:
+> [!IMPORTANT]
+> 使用 `for_each` 和 `for` 表达式遍历 CSV 文件内容并获取所需数据。
 
-1. Use a single `aws_vpc_security_group_ingress_rule` resource block to create security group inbound rules for `app-1-sg` security group. 
+### 任务 6：创建所需资源
 
-* If `description` in CSV is `app-1`, the rule must be associated with `app-1-sg` security group. Only consider inbound rules, the outbound rules should be ignored.
-
-2. Use a single `aws_vpc_security_group_egress_rule` resource block to create security group egress rules for `app-2-sg` security group.
-
-* If `description` in CSV is `app-2`, the rule must be associated with `app-2-sg` security group. Only consider outbound rules, the inbound rules should be ignored.
-
-> [!IMPORTANT]  
-> Use the `for_each` and `for expression` to iterate over the contents of CSV files to fetch necessary data.
-
-
-### Task 6 - Create Necessary Resources
-
-Run the following command to create the resources defined in previous tasks:
+运行以下命令创建前面任务中定义的资源：
 
 `terraform apply -auto-approve`
 
-### Task 7 - Create Folders Based on Following Structure
+### 任务 7：创建目录结构
 
-Create the following folder structure within the challenge-5 directory:
+在 challenge-5 目录中创建以下结构：
 
 ```sh
 challenge-5
@@ -79,52 +68,51 @@ challenge-5
     └── sg
 ```
 
-### Task 8 - Refactor Code
+### 任务 8：重构代码
 
-Move the following resource types from the `base-folder` into `vpc` child module.
+将以下资源类型从 `base-folder` 移动到 `vpc` 子模块：
 
-| Resource Types |  Child Module Folder | 
-| :---        |    :----:   | 
-| `aws_vpc`               | vpc      | 
-| `aws_subnet`            | vpc      | 
+| 资源类型 | 子模块目录 |
+| :--- | :---: |
+| `aws_vpc` | vpc |
+| `aws_subnet` | vpc |
 
-   
-Move the following resource types from the `base-folder` into `ec2` child module.
+将以下资源类型从 `base-folder` 移动到 `ec2` 子模块：
 
-| Resource Types |  Child Module Folder | 
-| :---        |    :----:   | 
-| `aws_instance`  | `ec2`   | 
+| 资源类型 | 子模块目录 |
+| :--- | :---: |
+| `aws_instance` | `ec2` |
 
-Move the following resource types from the `base-folder` into `sg` child module.
+将以下资源类型从 `base-folder` 移动到 `sg` 子模块：
 
-| Resource Types |  Child Module Folder | 
-| :---        |    :----:   | 
-| `aws_security_group`  | sg   | 
-| `aws_vpc_security_group*` | sg    | 
+| 资源类型 | 子模块目录 |
+| :--- | :---: |
+| `aws_security_group` | sg |
+| `aws_vpc_security_group*` | sg |
 
+### 任务 9：为 VPC-Infra 使用 S3 Backend
 
-### Task 9 - Use S3 Backend for VPC-Infra
+在 AWS 账户中手动创建 S3 Bucket。
 
-Manually create S3 bucket in your AWS Account.
+在 `infra/vpc-infra` 目录中：
 
-In the `infra/vpc-infra` folder:
-* Call the `vpc` child module using module sources
-* Import existing VPC and subnet resources
-* Configure S3 backend where state file is stored in `vpc.tfstate`
-* Migrate local state to S3 backend
- 
+* 使用 module source 调用 `vpc` 子模块。
+* 导入现有 VPC 和子网资源。
+* 配置 S3 backend，将 state 文件存储为 `vpc.tfstate`。
+* 将本地 state 迁移到 S3 backend。
 
-### Task 10 - Import EC2 and SG Infrastructure
+### 任务 10：导入 EC2 和 SG 基础设施
 
-In `infra/others` folder:
-* Reference to the `ec2` and `sg` child modules using module sources.
-* Use `terraform_remote_state` to fetch subnet IDs from `vpc.tfstate`
-* Define `terraform_remote_state` in root module only and not child.
-* Import existing EC2 and security group resources
+在 `infra/others` 目录中：
+
+* 使用 module source 引用 `ec2` 和 `sg` 子模块。
+* 使用 `terraform_remote_state` 从 `vpc.tfstate` 获取子网 ID。
+* 只在根模块中定义 `terraform_remote_state`，不要在子模块中定义。
+* 导入现有 EC2 和 Security Group 资源。
 
 > [!TIP]
-> Ensure outputs in `vpc.tfstate` contain the subnet_ids of both the subnets
+> 确保 `vpc.tfstate` 的 output 包含两个子网的 `subnet_ids`。
 
-### Task 11 - Destroy the Infrastructure
+### 任务 11：销毁基础设施
 
-Destroy all the infrastructure created as part of this challenge.
+销毁本挑战中创建的所有基础设施。

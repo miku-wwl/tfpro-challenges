@@ -1,82 +1,72 @@
-
 ## Challenge 3
 
-This challenge focuses on implementing a multi-provider configuration in Terraform Modules using AWS services. 
+本挑战重点考查如何在 Terraform Module 中使用 AWS 服务实现多 Provider 配置。
 
-### Base Task
+### 基础任务
 
-The following important resource related code is configured  in the `base-folder`:
+`base-folder` 中配置了以下重要资源代码：
 
-| Resource Code | Description | 
-| :---        |    :----:   | 
-| `EC2FullAccess` IAM Role  | Provides Full Access to EC2 service.      | 
-| `IAMFullAccess` IAM Role | Provides Full Access to IAM service.   | 
-| `ReadOnlyRole` IAM Role | Provides Read Only Access to Necessary Services.   | 
-| `kplabs-challenge3-user` | Ability to Assume `EC2FullAccess` and `IAMFullAccess` Roles in AWS Account    | 
-| `ro-user` | Ability to Assume `ReadOnlyRole` IAM Role in AWS Account    
+| 资源代码 | 说明 |
+| :--- | :---: |
+| `EC2FullAccess` IAM Role | 提供对 EC2 服务的完全访问权限。 |
+| `IAMFullAccess` IAM Role | 提供对 IAM 服务的完全访问权限。 |
+| `ReadOnlyRole` IAM Role | 提供对所需服务的只读权限。 |
+| `kplabs-challenge3-user` | 能够在 AWS 账户中 Assume `EC2FullAccess` 和 `IAMFullAccess` Role。 |
+| `ro-user` | 能够在 AWS 账户中 Assume `ReadOnlyRole` IAM Role。 |
 
-Run the `terraform apply -auto-approve` to create necessary resource before proceeding to Task 1.
+在开始任务 1 之前，运行 `terraform apply -auto-approve` 创建所需资源。
 
+### 任务
 
-### Tasks:
+#### 1. 将资源拆分到子模块
 
-#### 1. Split Resource into Child Modules
+按照下表，将 `challenge-3.tf`（不是 base-folder）中的资源拆分（移动）到子模块。所有子模块都必须位于 `modules` 目录中。
 
-Split (Move) the below mentioned resources from `challenge-3.tf` (not base folder) into child modules as described in below table. Each child module must be inside the `modules` folder.
+| 资源类型 | 子模块目录 |
+| :--- | :---: |
+| `aws_launch_template` | asg |
+| `aws_autoscaling_group` | asg |
+| `aws_iam_user` | iam |
+| `aws_iam_user_policy` | iam |
 
+在根模块的 `challenge-3.tf` 中配置正确的 module source，以加载所有子模块。
 
-| Resource Type  | Child Module Folder | 
-| :---        |    :----:   | 
-| `aws_launch_template`  | asg      | 
-| `aws_autoscaling_group`  | asg   | 
-| `aws_iam_user` | iam    | 
-| `aws_iam_user_policy` | iam    | 
+#### 2. 创建共享 Config 和 Credentials 文件
 
-Configure the appropriate module sources in the root module (challenge-3.tf) to load all child modules.
+为本项目配置共享的 AWS credentials 和 config 文件。
 
-#### 2. Create Shared Config and Credentials File
+* `conf` 和 `credentials` 文件必须位于 `challenge-3/.aws` 目录中。
+* config 文件只能包含 `[asg]` 和 `[iam]` 两个 profile，不能包含 default 或其他 profile。
+* 两个 profile 均使用 `us-east-1` Region。
+* `./aws/conf` 中的 `[asg]` 和 `[iam]` profile 必须按以下要求指向 base-folder 创建的正确 IAM Role：
 
-Set up a shared AWS credentials and configuration files for this project.
-
-* The `conf` and `credentials` file must be present in the `.aws` folder in `challenge-3` directory. 
-
-* The config file must only have two profiles `[asg]` and `[iam]`. No default or other profile should me mentioned.
-* Use the region of `us-east-1` for both the profiles.
-
-* Both the `[asg]` and `[iam]` profile in `./aws/conf` file should point to appropriate IAM roles that were created in `base-folder`  using following details:
-```
- [asg] profile should point to ARN of IAM role named `EC2FullAccess` 
- [iam] profile should point to ARN of IAM role named `IAMFullAccess`
+```text
+[asg] profile 应指向名为 `EC2FullAccess` 的 IAM Role ARN
+[iam] profile 应指向名为 `IAMFullAccess` 的 IAM Role ARN
 ```
 
-* The `[asg]` and `[iam]` profile MUST use credentials associated with `kplabs-challenge3-user` from `base-folder` to assume the necessary roles.
+* `[asg]` 和 `[iam]` profile 必须使用 base-folder 中 `kplabs-challenge3-user` 的凭证来 Assume 所需 Role。
 
+#### 3. 添加正确的 Provider 配置
 
-#### 3. Add Appropriate Provider Configuration
+* ASG 子模块必须使用 `[asg]` profile。
+* IAM 子模块必须使用 `[iam]` profile。
+* `data.aws_caller_identity.local` 必须 Assume `ReadOnlyRole` 来获取数据，可使用 `ro-user` 的凭证进行身份验证。
 
-* ASG Child-Module should make use of `[asg]` profile.
-* IAM Child-Module should make use of `[iam]` profile.
+#### 4. 部署资源
 
-* `data.aws_caller_identity.local` MUST assume the `ReadOnlyRole` to fetch the data. Credentials of `ro-user` can be used for authentication.
+先运行 `terraform apply` 部署 `local_file` 资源，此时不应创建其他资源。确认包含账户编号的 `txt` 文件已成功创建。
 
-#### 4. Deploy Resources
+然后运行 `terraform apply -auto-approve` 创建所有其他资源。
 
-Run `terraform apply` command to deploy `local_file resource` first. No other resources should be created at this step. Verify if `txt` file with account number is created successfully. 
+#### 5. 阻止 Desired Capacity 变更
 
-Run the `terraform apply -auto-approve` to create all other resources.
+将 Terraform 代码中的 `desired_capacity` 从 `1` 改为 `2`。
 
+添加适当配置以忽略对 `desired_capacity` 的任何变更，使实际运行的 EC2 实例数量仍与基础代码一样保持为 `1`。
 
-#### 5. Prevent Change of Desired Capacity
+应用解决方案后，再尝试修改 ASG 资源的 capacity，确认 Terraform 是否计划更新实际资源。
 
-Change `desired_capacity` in Terraform code from `1` to `2`
+### 销毁基础设施
 
-Add appropriate solution that ignores any changes made to `desired_capacity` so that only `1` EC2 instance runs as part of desired_capacity similar to base code provided.
-
-After you have applied solution, try changing capacity for ASG resource to verify if Terraform plans to change/update it in actual resource.
-
-### Destroy Infrastructure
-
-Delete all the infrastructure created as part of this Lab.
-
-
-
+删除本实验中创建的所有基础设施。

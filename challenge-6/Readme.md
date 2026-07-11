@@ -1,48 +1,48 @@
-
 ## Challenge 6
 
-This challenge focuses on implementing a multi-provider configuration and focusses on your understanding of AWS Provider
+本挑战重点考查多 Provider 配置以及你对 AWS Provider 的理解。
 
-### Base Task
+### 基础任务
 
-The following important resource related code is configured  in the `base-folder`:
+`base-folder` 中配置了以下重要资源代码：
 
-| Resource Code | Description | 
-| :---        |    :----:   | 
-| `EC2FullAccess` IAM Role  | Provides Full Access to EC2 service.      | 
-| `IAMFullAccess` IAM Role | Provides Full Access to IAM service.   | 
-| `ReadOnlyRole` IAM Role | Provides Read Only Access to Necessary Services.   | 
-| `default-profile-user` | Ability to Assume `ReadOnlyRole` IAM Role in AWS Account    
-| `kplabs-ec2-user` | Ability to Assume `EC2FullAccess` IAM Role in AWS Account    
-| `kplabs-iam-user` | Ability to Assume `IAMFullAccess` IAM Role in AWS Account    
+| 资源代码 | 说明 |
+| :--- | :---: |
+| `EC2FullAccess` IAM Role | 提供对 EC2 服务的完全访问权限。 |
+| `IAMFullAccess` IAM Role | 提供对 IAM 服务的完全访问权限。 |
+| `ReadOnlyRole` IAM Role | 提供对所需服务的只读权限。 |
+| `default-profile-user` | 能够在 AWS 账户中 Assume `ReadOnlyRole` IAM Role。 |
+| `kplabs-ec2-user` | 能够在 AWS 账户中 Assume `EC2FullAccess` IAM Role。 |
+| `kplabs-iam-user` | 能够在 AWS 账户中 Assume `IAMFullAccess` IAM Role。 |
 
-Navigate to the base-folder and run  `terraform apply -auto-approve` to create necessary resource before proceeding to Task 1.
+进入 base-folder 并运行 `terraform apply -auto-approve` 创建所需资源，然后再开始任务 1。
 
+### 任务
 
-### Tasks:
+### 1. 创建 AWS Config 文件
 
-### 1. Build the AWS Config File
+在 `./aws/config` 中创建以下 3 个 profile：
 
-Create 3 profiles in the `./aws/config` file with following names
 ```sh
 readonly-access
 iam-access
 ec2-access
 ```
 
-All the three profiles should have following configuration
+三个 profile 都应包含以下配置：
+
 ```sh
 region=us-east-1
 output=text
 ```
 
-* `iam-access` profile should assume `IAMFullAccess` IAM role created from the base folder.
-* `ec2-access` profile should assume `EC2FullAccess` IAM role created from the base folder.
-* `readonly-access` profile should assume `ReadOnlyRole` IAM role created from the base folder.
+* `iam-access` profile 应 Assume base-folder 创建的 `IAMFullAccess` IAM Role。
+* `ec2-access` profile 应 Assume base-folder 创建的 `EC2FullAccess` IAM Role。
+* `readonly-access` profile 应 Assume base-folder 创建的 `ReadOnlyRole` IAM Role。
 
-### 2. Build the AWS Credentials File
+### 2. 创建 AWS Credentials 文件
 
-The `./aws/credentials` file MUST have credentials associated with only 2 profiles in following format:
+`./aws/credentials` 文件必须只包含以下两个 profile 的凭证：
 
 ```sh
 [iam-access]
@@ -54,43 +54,35 @@ aws_access_key_id=ACCESS-KEY-HERE
 aws_secret_access_key=SECRET-KEY-HERE
 ```
 
-The Access/Secret key for `[iam-access]` profile should be fetched from IAM user named `kplabs-iam-user` created from the base  folder.
+`[iam-access]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-iam-user`。
 
-The Access/Secret key for `[ec2-access]` profile should be fetched from IAM user named `kplabs-ec2-user` created from the base  folder.
+`[ec2-access]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-ec2-user`。
 
+### 3. 添加 Source Profile
 
-### 3. Add Source Profile
+`readonly-access` profile 应使用 `default` profile 的凭证来 Assume 所需 Role。为该 profile 添加必要参数以实现此要求。
 
-The `readonly-access` profile should be configured to use credentials associated with `default` profile to assume the necessary role. Add necessary parameter to this profile to achieve this.
+不得在 challenge-6 目录的 `./aws/config` 或 `./aws/credentials` 中添加 `[default]` profile。
 
-You cannot add `[default]` profile in `./aws/config` or `./aws/credentials` file of challenge-6 folder.
+`default` profile 的凭证位于 base-folder 的 `default-creds.txt` 文件中。
 
-The `default` profile credentials are present in a file named `default-creds.txt` in `base-folder`.
+### 4. 修改 `challenge-6.tf`
 
-
-### 4. Modify `challenge-6.tf` file
-
-* `aws_iam_role` resource type must use the `[iam-access]` profile.
-
-* `aws_security_group` resource type must use the `[ec2-access]` profile.
-
-* `aws_caller_identity` data source should use of information mentioned in `readonly-access` profile to make request to AWS.
+* `aws_iam_role` 资源类型必须使用 `[iam-access]` profile。
+* `aws_security_group` 资源类型必须使用 `[ec2-access]` profile。
+* `aws_caller_identity` data source 应使用 `readonly-access` profile 中的信息向 AWS 发出请求。
 
 > [!TIP]
-> For `readonly-access` profile related configuration, you can fetch all necessary information from `.aws/config` file and `default-creds.txt` and add it in the `provider` block instead of referencing these files.
-> 
-### 5. Apply Changes
+> 对于 `readonly-access` profile 的相关配置，可以从 `.aws/config` 和 `default-creds.txt` 获取全部必要信息，并直接添加到 `provider` block 中，而不是引用这些文件。
 
-Run `terraform apply -auto-approve` to ensure all resources are created successfully.
+### 5. 应用变更
 
-### 6. Remove Deprecation Related Warnings
+运行 `terraform apply -auto-approve`，确保成功创建所有资源。
 
-Remove any deprecated warnings that you might see as part of code / output. 
+### 6. 移除弃用警告
 
+移除代码或输出中出现的所有 deprecated 警告。
 
-### 7.  Destroy Infrastructure
+### 7. 销毁基础设施
 
-Delete all the infrastructure created as part of this Lab.
-
-
-
+删除本实验中创建的所有基础设施。

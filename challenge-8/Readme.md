@@ -1,55 +1,49 @@
-
 ## Challenge 8
 
-This challenge is designed to help you practice Terraform concepts such as data sources, for expressions, output values, local values.
+本挑战用于练习 data source、`for` 表达式、output value 和 local value 等 Terraform 概念。
 
-### Task 1 - Create Base Resources
+### 任务 1：创建基础资源
 
-1. Navigate to the `base-folder`.
-2. Run the following command to create the initial resources:
+1. 进入 `base-folder`。
+2. 运行以下命令创建初始资源：
 
 `terraform apply -auto-approve`
 
-As part of this base task, following 3 subnets are created in `central-vpc`
+此基础任务会在 `central-vpc` 中创建以下 3 个子网：
 
-| Subnets |  VPC | 
-| :---        |    :----:   | 
-| `app-subnet`               | central-vpc      | 
-| `database-subnet`            | central-vpc      | 
-| `central-subnet`            | central-vpc      | 
+| 子网 | VPC |
+| :--- | :---: |
+| `app-subnet` | central-vpc |
+| `database-subnet` | central-vpc |
+| `central-subnet` | central-vpc |
 
-### Task 2 - Define Data Source
+### 任务 2：定义 Data Source
 
-* Create a file named `datasource.tf` in the root folder.
+* 在根目录创建 `datasource.tf`。
+* 定义 data source，获取基础任务中创建的 3 个子网所关联的 CIDR block。
+* 使用名为 `subnet_ids` 的 output，将获取到的子网 ID 与子网名称一起显示。
 
-* Define a data source to fetch CIDR blocks associated with all the 3 subnets created in base-task. 
+### 任务 3：创建 Security Group
 
-* Display the fetched subnet IDs as output values named `subnet_ids` along with the name of subnets. 
+在 `central-vpc` 中创建名为 `kplabs-sg` 的 Security Group。
 
-### Task 3 - Create Security Group 
+### 任务 4：创建 VPC Security Group Ingress Rule
 
-Create a security group named `kplabs-sg` in the `central-vpc`
+根据 `sg.csv` 的内容和以下条件，使用 `aws_vpc_security_group_ingress_rule` 资源类型创建 Security Group Rule。
 
+* 只能创建入站规则。
+* 根据 CSV 文件中 `cidr_block` 的值，计算下表所示的结果：
 
-### Task 4 - Create VPC Security Group Ingress Rule
+| cidr_block 的值 | 计算结果 |
+| :--- | :---: |
+| `app` | `app-subnet` 的 CIDR block |
+| `database` | `database-subnet` 的 CIDR block |
+| `monitoring` | `central-subnet` 的 CIDR block |
+| `anti-virus` | `central-subnet` 的 CIDR block |
 
-Use the `aws_vpc_security_group_ingress_rule` resource type to create security group rules based on the content of the `sg.csv` file and following conditions.
+### 任务 5：输出值
 
-* Only inbound rules must be created.
-
-* Based on the values defined in `cidr_block` in CSV file, following value should be computed
-
-| cidr_block value |  Computational Output | 
-| :---        |    :----:   | 
-| `app`               | `app-subnet` CIDR block     | 
-| `database`            | `database-subnet` CIDR block  | 
-| `monitoring`            | `central-subnet` CIDR block     | 
-| `anti-virus`            | `central-subnet` CIDR block     | 
-
-
-### Task 5 - Output Values
-
-Use output values to output data with below shown format:
+使用 output 按照以下格式输出数据：
 
 ```sh
 filtered_data = {
@@ -68,9 +62,9 @@ filtered_data = {
     "from_port" = 5432
     "to_port" = 5432
   }
-...... more rules will be below in your output.
+  # 后续 output 中还应包含更多规则……
 ```
 
-### Task 6 - Destroy the Infrastructure
+### 任务 6：销毁基础设施
 
-Destroy all the infrastructure created as part of this challenge.
+销毁本挑战中创建的所有基础设施。

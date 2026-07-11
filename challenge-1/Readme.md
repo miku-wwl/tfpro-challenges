@@ -1,26 +1,25 @@
-
 ## Challenge 1
 
-This challenge is designed to test your understanding of Terraform by requiring you to fix broken code, import resources, output values, and manage Terraform states effectively.
+本挑战通过修复错误代码、导入资源、输出值以及管理 Terraform 状态，考查你对 Terraform 的理解。
 
-This challenge contains 8 tasks to test your ability with Terraform.
+本挑战共包含 8 个任务。
 
-### Tasks:
+### 任务
 
-#### 1. Fix the Broken Code
+#### 1. 修复错误代码
 
-The provided Terraform code in this folder has syntax errors, resource misconfiguration, or other issues. Your goal is to fix these issues and deploy the resources successfully.
+本目录中提供的 Terraform 代码存在语法错误、资源配置错误或其他问题。你需要修复这些问题并成功部署资源。
 
-#### 2. Output the Values
+#### 2. 输出值
 
-Use the `output` block in Terraform to display the following values in the CLI:
+使用 Terraform 的 `output` 块在 CLI 中显示以下值：
 
-* List of S3 Bucket names.
-* List of IAM user names.
-* Id of Security Group
-* Id of Security Group Rules.
+* S3 Bucket 名称列表。
+* IAM 用户名列表。
+* Security Group ID。
+* Security Group Rule ID。
 
-The format of the output values should look similar to the code below. The values can be different.
+输出格式应与下面的示例类似，实际值可以不同。
 
 ```sh
    s3_buckets = [
@@ -38,48 +37,41 @@ The format of the output values should look similar to the code below. The value
     ]
 ```
 
-#### 3. Store Output Values to File
+#### 3. 将输出值保存到文件
 
-Save the output values to files as per the below table
+按照下表将输出值保存到对应文件：
 
-| Output Value of Object  | File Name | 
-| :---        |    :----:   | 
-| S3 Bucket Names   | s3.txt      | 
-| IAM User Names | iam-users.txt    | 
-| Security Group ID  | sg-combined.txt        | 
-| VPC Ingress Rule ID  | sg-combined.txt       | 
+| 对象的输出值 | 文件名 |
+| :--- | :---: |
+| S3 Bucket 名称 | s3.txt |
+| IAM 用户名 | iam-users.txt |
+| Security Group ID | sg-combined.txt |
+| VPC Ingress Rule ID | sg-combined.txt |
 
+#### 4. 删除资源配置和文件
 
+* 从 Terraform 配置中删除与 `aws_security_group` 和 `aws_vpc_security_group_ingress_rule` 资源类型有关的代码。
+* 删除 `terraform.tfstate` 文件及其备份文件 `terraform.tfstate.backup`（如果存在）。
 
-#### 4. Delete the Resource and Files
+#### 5. 导入所有资源
 
-* Remove the `aws_security_group` and `aws_vpc_security_group_ingress_rule` resource type related code from your  Terraform configuration.
+* 将步骤 1 中创建的所有 AWS 资源导入新的 Terraform state 文件。
+* 确保现有 Terraform 配置与 AWS 中的实际资源一致，并且不会删除任何实际资源。
 
-* Delete the `terraform.tfstate` file and it's backup (terraform.tfstate.backup), if available.
+#### 6. 创建新资源
 
-#### 5. Import ALL resources
+* 使用 `aws_s3_object` 在 S3 Bucket 中创建一个新对象。
+* 对象名称必须为 `new.txt`。
+* 对象内容必须为 `Success`。
 
-* Import all AWS resources created in Step 1 into a new Terraform state file. 
+#### 7. 从 State 中移除对象
 
-* Ensure the existing Terraform configuration matches the actual resources in AWS and that no actual resources are deleted.
-
-#### 6. Create New Resource
-
-* Create a new object in S3 bucket using `aws_s3_object`
-
-* The name of object must be `new.txt`
-
-* Content of the object must be `Success`
-
-#### 7. Remove Object from State
-
-* Remove the S3 object code created in Step 1 named `base.txt` from the Terraform code and state file.
-* Ensure this object is not deleted from AWS.
+* 从 Terraform 代码和 state 文件中移除步骤 1 创建的 S3 对象 `base.txt`。
+* 确保该对象不会从 AWS 中删除。
 
 > [!CAUTION]
-> The previous S3 object `base.txt` must not be deleted, othewise you will loose marks.
+> 不得删除之前创建的 S3 对象 `base.txt`，否则会被扣分。
 
+#### 8. 销毁所有资源
 
-#### 8. Destroy all Resources
-
-Destroy all resources created as part of this Challenge 1
+销毁本 Challenge 1 中创建的所有资源。

@@ -1,21 +1,20 @@
 ## Challenge 7
 
-This challenge tests your understanding of data types in Terraform and how to dynamically extract and process data from an external CSV file.
+本挑战考查你对 Terraform 数据类型的理解，以及如何从外部 CSV 文件动态提取和处理数据。
 
-### Tasks:
+### 任务
 
-All values **must** be fetched dynamically from the `ec2.csv` file. Avoid hardcoding any values from CSV in output values.
+所有值都**必须**从 `ec2.csv` 动态获取。不要在 output 中硬编码 CSV 里的任何值。
 
-### 1. Fetch the Data from CSV file
+### 1. 从 CSV 文件获取数据
 
-Create a **local value** that reads and fetches all the data from the `ec2.csv` file.
+创建一个 **local value**，读取并获取 `ec2.csv` 中的全部数据。
 
+### 2. 输出 CSV 中的 AMI ID 列表
 
-### 2. Output a List of AMI IDs from CSV
+创建名为 `list_amis` 的 **output value**，动态生成包含 CSV 中所有 AMI ID 的 `list`。
 
-Create an **output value** named `list_amis` that dynamically generates a `list` of all AMI IDs present in the CSV file.
-
-Reference Final Output:
+参考最终输出：
 
 ```sh
 list_amis = [
@@ -25,22 +24,23 @@ list_amis = [
   "ami-0995922d49dc9a17d",
 ]
 ```
-### 3. Output a Unique List of Team Names from the CSV
 
-Create an **output value** named `unique_team_names` that contains a `list` of all unique team names from the CSV file (no duplicates allowed).
+### 3. 输出 CSV 中唯一的 Team 名称列表
 
-Reference Final Output:
+创建名为 `unique_team_names` 的 **output value**，其中包含 CSV 中所有唯一 Team 名称组成的 `list`，不允许重复。
+
+参考最终输出：
 
 ```sh
-unique_team_names     = ["DevOps","SRE","Security"]
+unique_team_names = ["DevOps","SRE","Security"]
 ```
 
+### 4. 输出 Region 的 List of Lists
 
-### 4. Output a List of Lists for Regions
+创建名为 `regions_list_of_lists` 的 **output value**。它应为一个 list of lists，CSV 中每个 Region 分别放在单独的内层 list 中。
 
-Create an **output value named** `regions_list_of_lists` that contains a list of lists, with each region name from the CSV file in its own individual list.
+参考最终输出：
 
-Reference Final Output:
 ```sh
 regions_list_of_lists = [
   [
@@ -58,11 +58,11 @@ regions_list_of_lists = [
 ]
 ```
 
-### 5. Output a Filtered List of Lists Based on a Condition
+### 5. 根据条件输出过滤后的 List of Lists
 
-Create an **output value** named `list_list_condition` that contains a list of lists, but only include rows where the `instance_type` is `nano`.
+创建名为 `list_list_condition` 的 **output value**。结果应为 list of lists，但只包含 `instance_type` 为 `nano` 的行。
 
-Reference Final Output:
+参考最终输出：
 
 ```sh
 list_list_condition = [
@@ -75,11 +75,11 @@ list_list_condition = [
 ]
 ```
 
-### 6. Map that contains total number of instance types
+### 6. 包含各实例类型总数的 Map
 
-Create an **output value** named `instance_count_by_type` that generates a map displaying the count of each instance_type in the CSV file.
+创建名为 `instance_count_by_type` 的 **output value**，生成一个 map，显示 CSV 中每种 `instance_type` 的数量。
 
-Reference Final Output:
+参考最终输出：
 
 ```sh
 instance_count_by_type = {
@@ -90,9 +90,9 @@ instance_count_by_type = {
 
 ### 7. List of Maps
 
-Create an **output value** named `instance_details` that generates a list of maps, where each map contains the team and type attributes for each instance from the CSV file.
+创建名为 `instance_details` 的 **output value**，生成一个 map 列表，每个 map 包含相应实例的 `team` 和 `type` 属性。
 
-Reference Final Output:
+参考最终输出：
 
 ```sh
 instance_details = [
@@ -114,10 +114,12 @@ instance_details = [
   },
 ]
 ```
-### 8. Map of Maps
-Output a map of map where each unique key contains combination of instance_type, region, and Team Name. The attributes for each map must be similar to the one shown in the reference output
 
-Reference Final Output:
+### 8. Map of Maps
+
+输出一个 map of maps，其中每个唯一 key 都由 `instance_type`、Region 和 Team Name 组合而成。每个 map 的属性应与参考输出类似。
+
+参考最终输出：
 
 ```sh
 map_of_maps = {

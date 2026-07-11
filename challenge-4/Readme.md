@@ -1,33 +1,29 @@
-
 ## Challenge 4
 
-This challenge tests your ability to work with external data files, loop through data, and dynamically create AWS resources using Terraform.
+本挑战考查使用外部数据文件、遍历数据以及通过 Terraform 动态创建 AWS 资源的能力。
 
+### 任务 1：创建 EC2 实例
 
-### Task 1 - Create EC2 instance
+根据 `ec2.csv` 的内容和以下条件创建 EC2 实例：
 
-Based on the contents of `ec2.csv` file, create EC2 instance based on following conditions:
+1. 仅当 Region 为 `us-east-1` 时创建 EC2 实例。
 
-1. Only create EC2 instance if Region is `us-east-1`
+2. 在 `aws_instance` 资源类型中，必须使用 `count` 和 `count.index` 遍历数据。不得在 `aws_instance` 资源类型中使用 `for_each` 或 `for` 表达式，但可以在其他位置使用。解决方案中只能有一个 `aws_instance` resource block。
 
-2. Inside `aws_instance` resource type, `count` and `count.index` should be used for iterating/looping over data. `for_each` or `for expression` should not be used inside `aws_instance` resource type. You are free to use it elsewhere. There should only be single `aws_instance` resource block in solution code.
+3. 确保根据 CSV 文件内容动态设置 `instance_type` 和 `ami_id`。
 
-3. Ensure that the `instance_type`, `ami_id`  are dynamically set based on the CSV file's content.
+4. 按照下表在 `aws_instance` 资源中替换 CSV 的 `instance_type` 值：
 
-4. The following value of `instance_type`from CSV file should be replaced in `aws_instance` resource type based on the below requirement
+| CSV 中的值 | 实际使用的值 |
+| :--- | :---: |
+| `micro` | t2.micro |
+| `nano` | t3.nano |
 
-| Value from CSV  | Actual Value to be Added | 
-| :---        |    :----:   | 
-| `micro`  | t2.micro      | 
-| `nano`  | t3.nano   | 
+5. 将 CSV 中的 `Team_Name` 映射到 EC2 实例的 `Name` tag。
 
+### 任务 2：输出值
 
-5. Map the `Team_Name` value from CSV to the EC2 instance's `Name` tag
-
-
-### Task 2 - Output Values
-
-Create output values that display the following information for each created EC2 instance:
+创建 output，为每个已创建的 EC2 实例显示以下信息：
 
 ```sh
 Instance ID
@@ -38,7 +34,7 @@ Subnet ID
 Security Group ID (firewall_id)
 ```
 
-Sample output value has been provided. The formating of your output value should be similar. The values can change
+下面提供了参考输出。输出格式应与其类似，实际值可以不同。
 
 ```sh
 running_ec2 = [
@@ -52,6 +48,6 @@ running_ec2 = [
     "team" = "Security"
     "type" = "micro"
   },
-  # Additional instances data...
+  # 其他实例数据……
 ]
 ```
