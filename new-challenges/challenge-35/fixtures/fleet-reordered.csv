@@ -1,0 +1,6 @@
+name,environment,location,instance_type,min_size,max_size,desired_capacity,owner,enabled
+retired,prod,dr,t3.micro,0,1,0,legacy,false
+worker,prod,primary,t3.micro,0,3,2,data,true
+batch,dev,dr,t3.micro,0,2,1,data,true
+api,prod,dr,t3.micro,0,2,1,platform,true
+api,prod,primary,t3.micro,0,2,1,platform,true

@@ -1,0 +1,8 @@
+{
+  "actions": [
+    "ssm:GetParameter",
+    "ssm:GetParameters"
+  ],
+  "resource_prefix": "arn:aws:ssm:us-east-1:000000000000:parameter/tfpro/"
+}
+

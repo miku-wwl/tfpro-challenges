@@ -1,0 +1,6 @@
+fleet_id,environment,subnet_key,instance_type,min_size,desired_capacity,max_size,enabled,owner
+api,prod,public-a,t3.micro,1,2,3,true,edge
+worker,prod,private-a,t3.small,0,1,4,true,platform
+preview,dev,public-a,t3.micro,0,1,2,true,developer-experience
+retired,prod,private-a,t3.micro,0,0,1,false,platform
+

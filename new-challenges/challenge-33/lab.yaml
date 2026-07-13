@@ -1,0 +1,14 @@
+id: challenge-33
+title: CLI Workspace 隔离与安全环境晋级
+score: 95
+timebox: 110m
+runtime: localstack
+terraform_version: "~> 1.6"
+services: [s3, sns, sts]
+objectives: [1b, 2a, 2b, 2e, 3b, 4a, 4c, 5a, 5b, 5d]
+invariants:
+  - only_dev_stage_prod_workspaces_are_valid
+  - resource_names_and_tags_include_the_workspace
+  - csv_order_does_not_change_resource_addresses
+  - saved_plans_cannot_cross_workspace_state_lineages
+  - drift_and_state_are_isolated_per_workspace

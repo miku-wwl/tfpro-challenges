@@ -1,0 +1,3 @@
+fleet_id,environment,subnet_key,instance_type,min_size,desired_capacity,max_size,enabled,owner
+api,prod,public-a,t3.micro,1,2,3,yes,edge
+

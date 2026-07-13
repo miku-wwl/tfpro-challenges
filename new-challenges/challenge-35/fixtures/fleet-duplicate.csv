@@ -1,0 +1,3 @@
+name,environment,location,instance_type,min_size,max_size,desired_capacity,owner,enabled
+api,prod,primary,t3.micro,0,2,1,platform,true
+api,prod,primary,t3.small,0,2,1,shadow,true

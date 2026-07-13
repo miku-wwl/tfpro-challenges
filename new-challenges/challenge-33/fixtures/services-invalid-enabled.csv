@@ -1,0 +1,3 @@
+service,owner,enabled
+api,platform,yes
+worker,data,true

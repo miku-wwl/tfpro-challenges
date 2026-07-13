@@ -1,0 +1,2 @@
+name,environment,location,instance_type,min_size,max_size,desired_capacity,owner,enabled
+bad_name,prod,primary,t3.micro,0,2,1,platform,true

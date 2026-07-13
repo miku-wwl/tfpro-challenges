@@ -1,0 +1,32 @@
+id: challenge-35
+title: 双 State 计算平台灾备发布 Capstone
+score: 98
+timebox: 160m
+runtime: localstack
+services:
+  - ec2
+  - iam
+  - sts
+concepts:
+  - localstack
+  - terraform_remote_state
+  - provider-aliases
+  - versioned-contracts
+  - nested-modules
+  - csvdecode
+  - stable-for-each
+  - saved-plan-json
+  - drift-recovery
+objectives:
+  - Publish a versioned dual-region foundation contract from an independent state
+  - Consume the contract through terraform_remote_state without cross-state resource references
+  - Route launch templates and instances through explicit primary and DR providers
+  - Expand a CSV catalog into stable fleet and replica identities
+  - Reject incompatible contracts, invalid locations, duplicates, and unsafe capacities
+  - Prove saved-plan delivery, zero-change reorder, drift recovery, and reverse destroy
+invariants:
+  - Foundation and fleet own separate state files
+  - Fleet identity is name@location and replica identity is name@location#NN
+  - Every AWS request uses loopback LocalStack and literal test credentials
+  - Destructive actions are rejected before applying saved delivery plans
+  - The final plan for both roots is empty

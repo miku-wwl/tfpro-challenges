@@ -1,0 +1,20 @@
+id: challenge-31
+title: CSV 驱动的 EC2 启动模板与实例舰队
+score: 96
+timebox: 120m
+runtime:
+  terraform: "~> 1.6"
+  provider: "hashicorp/aws ~> 5.100.0"
+  target: localstack
+  services: [ec2, sts]
+objectives:
+  - Normalize a weakly typed fleet CSV into validated deterministic collections
+  - Resolve AMI, VPC, and subnet facts through AWS data sources
+  - Build launch templates and EC2 instances with stable business keys
+  - Prove row-order independence, capacity invariants, and referential integrity
+invariants:
+  - fleet_id is the only resource identity and duplicate active IDs are rejected
+  - disabled and non-target-environment rows never enter the resource graph
+  - min_size is not greater than desired_capacity and desired_capacity is not greater than max_size
+  - desired capacity expands into stable fleet_id/ordinal instance identities
+  - all AWS traffic is restricted to a loopback LocalStack endpoint with literal test credentials

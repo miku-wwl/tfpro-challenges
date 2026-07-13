@@ -1,0 +1,3 @@
+service,owner,enabled
+bad_service,platform,true
+worker,data,true
