@@ -1,0 +1,8 @@
+{
+  "application": "orders-api",
+  "environment": "dev",
+  "version": "1.0.0",
+  "artifact": "orders-api_1.0.0.zip",
+  "sha256": "8d969eef6ecad3c29a3a629280e686cff8ca7cd99c4d8c5d94a0f9d2f9f2c6f0"
+}
+

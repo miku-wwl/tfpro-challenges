@@ -1,0 +1,13 @@
+{
+  "expected_account_id": "000000000000",
+  "slots": {
+    "primary": "us-east-1",
+    "dr": "us-west-2",
+    "audit": "us-east-2"
+  },
+  "allowed_credentials": {
+    "access_key": "test",
+    "secret_key": "test"
+  },
+  "allowed_services": ["s3", "iam", "sts"]
+}

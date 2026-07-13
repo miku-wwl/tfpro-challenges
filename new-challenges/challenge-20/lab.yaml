@@ -1,0 +1,19 @@
+id: challenge-20
+title: Zero-replacement dual-region nested-module refactor
+score: 96
+timebox: 105m
+runtime:
+  terraform: "~> 1.6"
+  provider: "hashicorp/aws ~> 5.100.0"
+  target: localstack
+  services: [s3, sns, sts]
+objectives:
+  - Refactor flat dual-region resources into nested reusable modules
+  - Thread aliased providers through every module boundary
+  - Preserve all resource identities with moved blocks
+  - Publish a deterministic cross-region failover contract
+invariants:
+  - The migration plan contains no create, delete, or replacement actions
+  - The DR stack uses the DR provider and reports the DR region
+  - Every module that consumes aws.target declares configuration_aliases
+  - Only loopback LocalStack endpoints and test credentials are permitted

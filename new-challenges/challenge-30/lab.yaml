@@ -1,0 +1,33 @@
+id: challenge-30
+title: 三层 State 双区域发布与恢复演练
+score: 98
+timebox: 150m
+runtime: localstack
+services:
+  - ec2
+  - s3
+  - sns
+  - dynamodb
+  - sts
+concepts:
+  - localstack
+  - terraform_remote_state
+  - multi-root-orchestration
+  - provider-aliases
+  - nested-modules
+  - csvdecode
+  - stable-for-each
+  - cross-state-contracts
+  - idempotent-delivery
+objectives:
+  - Publish versioned contracts across three independent Terraform states
+  - Route primary and DR resources through explicit provider aliases
+  - Expand a CSV catalog into stable regional module instances
+  - Enforce upstream contract versions and regional consistency
+  - Prove ordered apply, clean repeated plans, and reverse destroy
+invariants:
+  - Cross-root dependencies use terraform_remote_state outputs only
+  - Workload identity is the unique name@location business key
+  - Every AWS request uses loopback LocalStack and test credentials
+  - Foundation, platform, and workloads each own a separate state
+  - The final plan for every root is empty

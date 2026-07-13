@@ -1,0 +1,20 @@
+id: challenge-24
+title: "三 provider slot：alias、子模块映射与身份诊断"
+score: 94
+timebox: 125m
+runtime: localstack
+services:
+  - s3
+  - iam
+  - sts
+objectives:
+  - 配置 primary、dr、audit 三个显式 AWS provider alias
+  - 通过 configuration_aliases 和 providers map 将 slot 传给 child module
+  - 用 STS caller identity 与 provider region 构造可审计诊断输出
+  - 将双区域 S3 与 IAM 资源绑定到正确 provider slot
+invariants:
+  - 三个 provider 都只能使用 loopback LocalStack 和 test/test
+  - primary、dr、audit region 必须分别为 us-east-1、us-west-2、us-east-2
+  - 三个 STS caller 的测试账号必须为 000000000000
+  - S3 与 IAM 资源不得落入错误 slot
+  - destroy 后唯一 bucket 和 IAM role 必须不存在

@@ -1,0 +1,23 @@
+id: challenge-11
+title: LocalStack 多区域 Provider Alias 与模块契约诊断
+objectives:
+  - 1a
+  - 2a
+  - 2b
+  - 2c
+  - 3a
+  - 3b
+difficulty: expert
+score_vs_tf_pro: 89
+timebox_minutes: 75
+runtime: localstack-and-mock
+terraform_version: "~> 1.6"
+destructive: false
+prerequisites:
+  - AWS provider alias
+  - LocalStack endpoint 与测试凭证
+invariants:
+  - only_localstack_test_credentials
+  - child_declares_both_configuration_aliases
+  - primary_and_recovery_mappings_are_not_swapped
+  - two_regions_and_accounts_are_observable

@@ -1,0 +1,19 @@
+id: challenge-19
+title: Stateful adoption and drift recovery
+score: 95
+timebox: 100m
+runtime:
+  terraform: "~> 1.6"
+  provider: "hashicorp/aws ~> 5.100.0"
+  target: localstack
+  services: [s3, dynamodb, sts]
+objectives:
+  - Adopt an existing S3 bucket and DynamoDB table without recreating them
+  - Move legacy state addresses into stable canonical addresses
+  - Deliberately forget a retired object with terraform state rm
+  - Reconcile out-of-band object drift through refresh-only and a corrective apply
+invariants:
+  - No create-before-destroy replacement is allowed during adoption
+  - Canonical state contains no legacy or retired addresses
+  - Only loopback LocalStack endpoints and test credentials are permitted
+  - A clean plan is required before and after drift repair

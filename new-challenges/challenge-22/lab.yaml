@@ -1,0 +1,22 @@
+id: challenge-22
+title: "LocalStack 远端状态迁移、锁与 producer/consumer 发布流水线"
+score: 97
+timebox: 180m
+runtime: localstack
+services:
+  - s3
+  - dynamodb
+  - sts
+objectives:
+  - 用 S3 backend 和 DynamoDB table 建立远端状态与锁
+  - 将 legacy local state 原位迁移到 LocalStack S3
+  - 用 terraform_remote_state 建立 producer/consumer 合同
+  - 使用保存的 plan 自动发布并按 consumer-first 顺序销毁
+invariants:
+  - backend 与 remote_state 只能访问 loopback LocalStack
+  - backend 凭证固定 test/test，S3 必须 path-style
+  - producer 迁移后资源身份不得丢失或重建
+  - consumer 必须读取 producer 的 schema v2 合同
+  - 每次 apply 都必须来自保存的 plan 文件
+  - destroy 顺序必须为 consumer、producer、bootstrap
+  - 最终 S3 bucket 与 DynamoDB lock table 必须不存在

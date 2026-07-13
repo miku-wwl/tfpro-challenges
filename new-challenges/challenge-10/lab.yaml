@@ -1,0 +1,23 @@
+id: challenge-10
+title: 单体 count 到多模块 for_each 的零替换迁移
+objectives:
+  - 1b
+  - 1c
+  - 1e
+  - 2a
+  - 2c
+  - 2d
+difficulty: expert
+score_vs_tf_pro: 91
+timebox_minutes: 90
+runtime: local
+terraform_version: "~> 1.6"
+destructive: false
+prerequisites:
+  - module composition
+  - state address refactoring
+invariants:
+  - first_migration_plan_has_no_create_or_delete
+  - final_state_uses_named_module_instances
+  - module_contract_version_is_two
+  - second_plan_is_empty

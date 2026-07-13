@@ -1,0 +1,19 @@
+id: challenge-23
+title: "零替换网络重构：count 到具名 for_each 嵌套模块"
+score: 96
+timebox: 150m
+runtime: localstack
+services:
+  - ec2
+  - sts
+objectives:
+  - 将单体 count 资源迁移到具名 for_each 嵌套模块
+  - 使用 moved blocks 在同一 state 中保持全部远端对象身份
+  - 发布稳定、带 schema_version 的 v2 模块接口
+  - 用保存的 plan 证明重构为零增删改
+invariants:
+  - 迁移计划不得 create、update、delete 或 replace
+  - 五个 legacy 地址必须全部出现 previous_address
+  - 最终 state 只能使用具名嵌套模块地址
+  - AWS 调用只能访问 loopback LocalStack，凭证固定为 test/test
+  - destroy 后不得留下本题资源

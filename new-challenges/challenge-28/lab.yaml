@@ -1,0 +1,14 @@
+id: challenge-28
+title: 双 State 双区域应用合同与稳定交付
+score: 96
+timebox: 110m
+runtime: localstack
+terraform_version: "~> 1.6"
+services: [ec2, s3, sns, sts]
+objectives: [1e, 2a, 2c, 2d, 2e, 3b, 3c, 3d, 4a, 4b, 5b, 5d]
+invariants:
+  - network_and_application_have_distinct_state
+  - remote_state_is_the_only_cross_stack_contract
+  - provider_aliases_route_regions_explicitly
+  - csv_order_does_not_change_addresses
+  - repeated_plans_are_empty

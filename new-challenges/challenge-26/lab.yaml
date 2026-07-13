@@ -1,0 +1,18 @@
+id: challenge-26
+title: CSV/JSON 驱动的 IAM 访问目录
+score: 94
+timebox: 105m
+runtime: localstack
+services:
+  - iam
+  - sts
+objectives:
+  - 将 CSV 身份目录与 JSON 策略目录规范化为稳定的对象映射
+  - 使用 aws_iam_policy_document 和可复用模块创建角色、客户托管策略与附件
+  - 对重复身份、未知策略、越权动作和非法环境执行负向验证
+  - 保持 for_each 地址稳定并仅通过敏感输出暴露访问清单
+invariants:
+  - AWS 调用只允许发送到 loopback LocalStack endpoint
+  - 身份地址不得依赖 CSV 行号或文件顺序
+  - 每个角色必须使用统一权限边界并且不得包含通配 Action
+  - 输出访问清单必须标记 sensitive

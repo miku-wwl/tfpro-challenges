@@ -1,0 +1,14 @@
+{
+  "artifact-publisher": {
+    "actions": ["s3:GetObject", "s3:PutObject"],
+    "resources": ["arn:aws:s3:::tfpro-artifacts/*"]
+  },
+  "empty-policy": {
+    "actions": [],
+    "resources": []
+  },
+  "wildcard-policy": {
+    "actions": ["s3:*"],
+    "resources": ["*"]
+  }
+}

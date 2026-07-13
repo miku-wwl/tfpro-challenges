@@ -1,0 +1,4 @@
+team,workload,policy,session_seconds
+security,detector,security-events,3600
+platform,delivery,artifact-publisher,3600
+payments,ledger,readonly-audit,3600

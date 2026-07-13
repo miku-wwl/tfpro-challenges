@@ -1,0 +1,19 @@
+id: challenge-25
+title: 配置制品的生命周期、导入与漂移恢复
+score: 95
+timebox: 110m
+runtime: localstack
+services:
+  - s3
+  - dynamodb
+  - sts
+objectives:
+  - 用 S3 对象和 DynamoDB item 发布同一配置版本
+  - 使用 replace_triggered_by、precondition、postcondition 和 prevent_destroy 建模生命周期
+  - 在不重建远端资源的情况下恢复 S3 bucket 的 state ownership
+  - 用 refresh-only 记录漂移，再以普通 plan/apply 恢复声明状态
+invariants:
+  - AWS 调用只允许发送到 loopback LocalStack endpoint
+  - S3 bucket 必须受 prevent_destroy 保护
+  - 配置版本或内容摘要变化必须替换 S3 object 与 DynamoDB item
+  - 导入后和漂移恢复后都必须得到 clean plan

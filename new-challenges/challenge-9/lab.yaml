@@ -1,0 +1,24 @@
+id: challenge-9
+title: 在同一 state 中接管、迁移并恢复漂移
+objectives:
+  - 1a
+  - 1b
+  - 1c
+  - 1d
+  - 1e
+  - 2d
+difficulty: expert
+score_vs_tf_pro: 90
+timebox_minutes: 75
+runtime: local
+terraform_version: "~> 1.6"
+destructive: true
+prerequisites:
+  - state CLI 基础
+  - lifecycle 与 import/moved block
+invariants:
+  - all_checkpoints_share_one_state
+  - legacy_addresses_move_without_replacement
+  - retired_object_is_forgotten_not_destroyed
+  - guardian_is_imported
+  - drift_is_detected_and_reconciled

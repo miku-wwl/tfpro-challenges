@@ -1,0 +1,68 @@
+# Challenge 10：单体配置到多模块的零替换迁移
+
+## 场景
+
+生产服务目录仍是 root module 中的 `count` 资源。平台团队要求把每个服务迁入独立
+child module，并把接口升级为 v2：以对象接收服务参数、支持 optional healthcheck、
+统一 context tags，同时对外输出保持兼容。已有实例不能重新创建。
+
+难点不是“最终配置能 apply”，而是从旧 state 到新地址的**第一次迁移计划**必须只有
+地址移动和 output 变化，不得出现任何资源 create/delete/replace。
+
+## 官方大纲 Objective
+
+- 1b/1c：保存并审阅迁移 plan，再精确 apply 该 plan。
+- 1e：检查 state 地址和 plan JSON 中的 `previous_address` / actions。
+- 2a：设计并调用可复用 child module。
+- 2c：演进 module input/output contract，保持调用方兼容。
+- 2d：从 `count` 迁移为稳定的 `for_each`，用 moved block 保留身份。
+
+## 任务
+
+1. 在一个空工作目录应用 `fixtures/legacy`，得到三个旧地址：
+   `terraform_data.service[0..2]`。
+2. 把资源实现迁入 `modules/service`，root 以服务名 map 调用模块。
+3. 将 child module 接口升级到 v2：
+   - `service` 对象包含 port、owner、tier 和 optional healthcheck；
+   - `context` 对象包含 environment 与 tags；
+   - 输出 `contract_version = 2`、manifest 与 healthcheck。
+4. 为每个旧地址写显式 moved block，目标为
+   `module.service["name"].terraform_data.this`。
+5. 保持底层 `terraform_data.input` 完全一致，避免借“接口升级”偷偷修改实例。
+6. 保存第一次 plan，使用 `terraform show -json` 证明所有 resource action 都是 no-op。
+7. apply 后检查最终 state 地址，再确认第二次 plan 退出码为 0。
+
+`starter/` 是一个未完成的中间提交：资源虽然进入了 child module，但 root 仍以 `count`
+调用扁平 v1 接口，没有任何 moved block，且忽略 healthcheck。它能被解析，却会让旧地址
+全部重建；你必须把这个半成品继续演进到最终合同。
+
+## 验收命令
+
+```powershell
+pwsh ./tests/grade.ps1 -CandidateDir ./starter
+```
+
+grader 会自行创建并清理 `.grade-work`，依次 apply legacy、覆盖候选配置、审阅 plan
+JSON、apply moved state、运行 `terraform test`。
+
+## 最终不变量
+
+- 初次迁移 plan 的三个资源 action 全是 `no-op`，没有 create/delete。
+- 最终 state 只有三个具名 module 资源地址，不再存在 root count 地址。
+- `api` healthcheck 为 `/ready`；未配置的服务输出 `null`。
+- 每个模块 contract version 都是 2；服务端口和原始 tags 未变化。
+- 迁移 apply 后 plan 完全幂等。
+
+## 安全边界
+
+- 只使用内建 `terraform_data`，不访问 AWS、凭证或网络 API。
+- 不允许用 `terraform state mv` 代替题目要求的可审计 moved blocks。
+- 不允许删除 state、重新 apply 新配置、手改 state JSON 或接受资源 replacement。
+- grader 只递归删除本题目录内的 `.grade-work`。
+
+## 官方参考
+
+- https://developer.hashicorp.com/terraform/language/modules/develop/refactoring
+- https://developer.hashicorp.com/terraform/language/modules/syntax
+- https://developer.hashicorp.com/terraform/language/meta-arguments/for_each
+- https://developer.hashicorp.com/terraform/internals/json-format

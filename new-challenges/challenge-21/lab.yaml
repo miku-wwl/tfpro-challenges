@@ -1,0 +1,20 @@
+id: challenge-21
+title: CSV-driven network and security-rule factory
+score: 95
+timebox: 100m
+runtime:
+  terraform: "~> 1.6"
+  provider: "hashicorp/aws ~> 5.100.0"
+  target: localstack
+  services: [ec2, sts]
+objectives:
+  - Normalize CSV rows into strongly typed deterministic collections
+  - Create a VPC, subnets, security groups, and ingress-rule resources with stable keys
+  - Resolve rule CIDRs through AWS data sources
+  - Validate referential integrity and publish owner-grouped outputs
+invariants:
+  - Reordering equivalent CSV rows produces a zero-change plan
+  - Disabled and non-target-environment rules do not enter the resource graph
+  - Rule identities use rule_id and never CSV row indexes
+  - Every managed AWS resource carries the grader's unique RunId tag
+  - Only loopback LocalStack endpoints and test credentials are permitted

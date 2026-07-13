@@ -1,0 +1,8 @@
+{
+  "application": "orders-api",
+  "environment": "prod",
+  "version": "9.9.9",
+  "artifact": "wrong.zip",
+  "sha256": "not-a-sha"
+}
+

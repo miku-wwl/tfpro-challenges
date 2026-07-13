@@ -1,0 +1,7 @@
+name,owner,environment,port,enabled,location
+api,platform,prod,443,true,primary
+worker,data,prod,8443,true,dr
+metrics,observability,prod,9090,true,both
+admin,platform,dev,443,true,primary
+legacy,platform,prod,80,false,primary
+

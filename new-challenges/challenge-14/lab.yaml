@@ -1,0 +1,24 @@
+id: challenge-14
+title: Upgrade provider and module contracts without losing reproducibility
+objectives:
+  - terraform_configuration
+  - module_versioning
+  - provider_requirements
+  - dependency_lock_file
+  - troubleshooting
+difficulty: advanced
+difficulty_score: 86
+score_vs_tf_pro: 86
+timebox_minutes: 70
+runtime: local
+terraform_version: "~> 1.6"
+services: []
+destructive: false
+invariants:
+  - terraform_binary_constraint_allows_supported_1_x_releases
+  - root_and_child_provider_constraints_intersect
+  - provider_is_upgraded_with_init_upgrade
+  - dependency_lock_file_is_readonly_reproducible
+  - module_v2_contract_is_explicitly_checked
+  - known_failure_modes_are_correctly_diagnosed
+  - no_real_cloud_or_credentials

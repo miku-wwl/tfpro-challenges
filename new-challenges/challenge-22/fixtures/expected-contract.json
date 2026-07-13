@@ -1,0 +1,6 @@
+{
+  "schema_version": 2,
+  "environment": "training",
+  "services": ["api", "worker"],
+  "legacy_address": "terraform_data.contract"
+}

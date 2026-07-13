@@ -1,0 +1,23 @@
+id: challenge-12
+title: Split state, migrate a backend, and orchestrate dependencies
+objectives:
+  - infrastructure_as_code_concepts
+  - terraform_configuration
+  - terraform_state
+  - terraform_workflow
+difficulty: advanced
+difficulty_score: 90
+score_vs_tf_pro: 90
+timebox_minutes: 80
+runtime: local
+terraform_version: "~> 1.6"
+services: []
+destructive: false
+invariants:
+  - producer_and_consumer_own_distinct_state
+  - legacy_state_is_migrated_without_recreation
+  - remote_state_exports_a_small_stable_contract
+  - automation_runs_producer_before_consumer
+  - automation_is_non_interactive_and_uses_saved_plans
+  - repeated_plans_are_empty
+  - no_credentials_or_real_cloud_resources

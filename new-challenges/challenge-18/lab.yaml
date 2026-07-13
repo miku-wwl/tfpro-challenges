@@ -1,0 +1,27 @@
+id: challenge-18
+title: Multi-stack dual-region platform capstone
+difficulty: expert
+score_vs_tf_pro: 96
+timebox_minutes: 120
+runtime: localstack-and-mock
+objectives:
+  - 1e
+  - 2a
+  - 2c
+  - 2d
+  - 2e
+  - 3b
+  - 3c
+  - 3d
+  - 4a
+  - 4b
+  - 4d
+  - 5b
+  - 5c
+  - 5d
+invariants:
+  - split_state_contract
+  - stable_service_identity
+  - explicit_provider_mapping
+  - deterministic_outputs
+  - only_localstack_test_credentials

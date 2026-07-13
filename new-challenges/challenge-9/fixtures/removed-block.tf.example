@@ -1,0 +1,9 @@
+# Terraform 1.7+ 示例。Challenge 9 的 required_version 以 1.6 为基线，禁止复制使用。
+removed {
+  from = terraform_data.retired
+
+  lifecycle {
+    destroy = false
+  }
+}
+

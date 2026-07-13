@@ -1,0 +1,3 @@
+rule_id,environment,security_group,subnet_key,protocol,from_port,to_port,description,owner,enabled
+orphan-rule,prod,web,missing-zone,tcp,443,443,Unknown subnet,edge,true
+

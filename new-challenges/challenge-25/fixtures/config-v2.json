@@ -1,0 +1,10 @@
+{
+  "application": "checkout",
+  "environment": "dev",
+  "features": {
+    "new_totals": true,
+    "fraud_screen": "strict",
+    "async_receipts": true
+  }
+}
+

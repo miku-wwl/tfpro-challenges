@@ -1,0 +1,24 @@
+id: challenge-13
+title: Build validated dynamic configuration from CSV and JSON contracts
+objectives:
+  - terraform_configuration
+  - hcl_expressions
+  - input_validation
+  - resource_contracts
+difficulty: advanced
+difficulty_score: 88
+score_vs_tf_pro: 88
+timebox_minutes: 70
+runtime: local
+terraform_version: "~> 1.6"
+services: []
+destructive: false
+invariants:
+  - semantic_for_each_keys_are_stable
+  - csv_values_are_explicitly_typed
+  - variable_validation_fails_early
+  - preconditions_enforce_row_contracts
+  - postconditions_enforce_normalized_results
+  - checks_enforce_cross_resource_budget
+  - outputs_are_deterministic
+  - derived_tokens_are_sensitive

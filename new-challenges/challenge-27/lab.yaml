@@ -1,0 +1,19 @@
+id: challenge-27
+title: 可审计的 S3/SNS 发布与恢复流水线
+score: 97
+timebox: 135m
+runtime: localstack
+services:
+  - s3
+  - sns
+  - sts
+objectives:
+  - 建立 S3 release object 到 SNS 通知的发布链路
+  - 用 saved plan 和 terraform show -json 执行 allowlist 审计
+  - 正确处理 detailed-exitcode 并生成机器可读 evidence
+  - 演练 state backup/restore、refresh-only 漂移恢复和失败发布回滚证据
+invariants:
+  - AWS 调用只允许发送到 loopback LocalStack endpoint
+  - 未通过 JSON plan 审计的 plan 不得 apply
+  - state drill 与失败 drill 前后远端资源必须保持不变
+  - 漂移恢复和成功发布结束时必须得到 detailed-exitcode 0

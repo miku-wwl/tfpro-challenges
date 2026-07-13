@@ -1,0 +1,5 @@
+name,environment,owner,port,enabled,tier,capacity
+api,prod,platform,443,true,critical,6
+worker,prod,data,8443,true,standard,3
+preview,dev,platform,8080,true,standard,2
+legacy,prod,platform,80,false,standard,1

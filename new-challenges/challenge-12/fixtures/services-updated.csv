@@ -1,0 +1,5 @@
+service,environment,subnet_slot,enabled
+orders,prod,15,true
+payments,prod,20,true
+catalog,prod,10,true
+preview,dev,30,false

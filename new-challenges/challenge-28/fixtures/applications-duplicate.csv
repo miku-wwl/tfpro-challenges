@@ -1,0 +1,3 @@
+name,owner,environment,port,enabled,location
+api,platform,prod,8443,true,primary
+api,platform,prod,9443,true,primary

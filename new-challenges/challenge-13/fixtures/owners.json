@@ -1,0 +1,10 @@
+{
+  "platform": {
+    "email": "platform@example.invalid",
+    "token_seed": "training-platform"
+  },
+  "data": {
+    "email": "data@example.invalid",
+    "token_seed": "training-data"
+  }
+}

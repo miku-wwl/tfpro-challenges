@@ -1,0 +1,3 @@
+name,environment,owner,port,enabled,tier,capacity
+api,prod,platform,443,true,critical,8
+worker,prod,data,8443,true,standard,7

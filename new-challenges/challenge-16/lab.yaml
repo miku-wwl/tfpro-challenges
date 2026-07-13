@@ -1,0 +1,14 @@
+id: challenge-16
+title: Terraform CLI 自动化与故障恢复
+score_vs_tf_pro: 91
+timebox_minutes: 90
+terraform_version: "~> 1.6"
+providers:
+  - hashicorp/local ~> 2.5.0
+execution: local-powershell-grader
+objectives:
+  - automate-saved-plan-workflows
+  - interpret-detailed-exitcode-and-json-plan
+  - detect-and-record-drift-with-refresh-only
+  - back-up-and-restore-state-safely
+safe_by_default: true

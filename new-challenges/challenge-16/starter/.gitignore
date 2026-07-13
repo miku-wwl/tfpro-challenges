@@ -1,0 +1,7 @@
+.terraform/
+.automation/
+*.tfstate
+*.tfstate.*
+*.tfplan
+generated-inventory.json
+

@@ -1,0 +1,3 @@
+name,owner,environment,locations,port,enabled
+api,platform,prod,primary|moon,8443,true
+worker,data,prod,primary,9000,true

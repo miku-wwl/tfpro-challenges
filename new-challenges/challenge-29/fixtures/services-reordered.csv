@@ -1,0 +1,7 @@
+name,owner,environment,retention_days,enabled
+legacy,platform,prod,1,false
+metrics,observability,prod,14,true
+admin,platform,dev,7,true
+worker,data,prod,30,true
+api,platform,prod,7,true
+

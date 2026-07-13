@@ -1,0 +1,8 @@
+rule_id,environment,security_group,subnet_key,protocol,from_port,to_port,description,owner,enabled
+dns-from-data,prod,database,data-a,udp,53,53,DNS from data subnet,data,true
+dev-web,dev,web,public-a,tcp,8080,8080,Development web,edge,true
+db-from-api,prod,database,data-a,tcp,5432,5432,PostgreSQL from API data path,data,true
+admin-from-public,prod,web,public-a,tcp,22,22,Temporary admin path,edge,false
+web-from-public,prod,web,public-a,tcp,443,443,HTTPS from public tier,edge,true
+metrics-from-private,prod,api,private-a,tcp,9090,9090,Metrics collector,platform,true
+api-from-web,prod,api,private-a,tcp,8443,8443,API from web subnet,platform,true
