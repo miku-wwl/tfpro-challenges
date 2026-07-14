@@ -69,10 +69,10 @@ output "s3_buckets" {
   value = [for bucket in aws_s3_bucket.example : bucket.id]
 }
 
-resource "aws_s3_object" "object" {
-  for_each = toset(var.s3_buckets)
-  bucket   = aws_s3_bucket.example[each.key].id
-  key      = var.s3_base_object
+resource "aws_s3_object" "new" {
+  bucket  = aws_s3_bucket.example[var.s3_buckets[0]].id
+  content = "Success"
+  key     = "new.txt"
 }
 
 resource "aws_security_group" "example" {
