@@ -1,5 +1,5 @@
 variable "s3_buckets" {
-  type = list(string)
+  type = set(string)
 }
 
 variable "s3_base_object" {

@@ -37,7 +37,7 @@ module "random" {
 module "ec2" {
   source               = "./modules/ec2"
   instance_type        = "t2.micro"
-  iam_instance_profile = aws_iam_instance_profile.test_profile.name
+  iam_instance_profile = module.iam.instance_profile_name
 }
 
 data "aws_iam_policy_document" "assume_role" {
@@ -57,15 +57,15 @@ data "aws_iam_policy_document" "assume_role" {
 module "iam" {
   source             = "./modules/iam"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json
-  random_pet         = module.random.outputs.random_pet
+  random_pet         = module.random.random_pet
   org-name           = var.org-name
 }
 
 module "s3" {
   source         = "./modules/s3"
-  s3_buckets     = var.s3_buckets
-  s3_base_object = s3_base_object
-  random_pet     = module.random.outputs.random_pet
+  s3_buckets     = toset(var.s3_buckets)
+  s3_base_object = var.s3_base_object
+  random_pet     = module.random.random_pet
 }
 
 module "sg" {
