@@ -2,7 +2,7 @@ resource "aws_security_group" "sg" {
   for_each = toset(["app-1-sg", "app-2-sg"])
 
   name   = each.value
-  vpc_id = data.aws_vpc.random.id
+  vpc_id = var.vpc_id
 }
 
 locals {

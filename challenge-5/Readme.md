@@ -97,6 +97,10 @@ challenge-5
 
 ### 任务 9：为 VPC-Infra 使用 S3 Backend
 
+从本任务开始，`infra/vpc-infra` 和 `infra/others` 分别作为两个独立的
+Terraform Root Module 使用。它们各自拥有独立的配置和 State，不要在
+`challenge-5` 顶层创建统一的 Root Module 来调用这两个目录。
+
 在 AWS 账户中手动创建 S3 Bucket。
 
 在 `infra/vpc-infra` 目录中：
