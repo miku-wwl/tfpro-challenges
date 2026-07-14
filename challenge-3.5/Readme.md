@@ -21,6 +21,19 @@ terraform apply -auto-approve
 - `kplabs-challenge35-user`
 - `ro-user-challenge35`
 
+这些是**基础设施**，由 `base-folder` 的独立 Terraform state 管理；它们不会出现在
+`challenge-3.5` 根目录执行的 `terraform state list` 中。只有先在 `base-folder` 执行
+apply，才会创建它们。可在对应目录分别核验：
+
+```powershell
+# 根目录：显示本实验自身管理的资源
+terraform state list
+
+# 基础设施目录：显示 Role、基础用户、Access Key 等
+Set-Location .\base-folder
+terraform state list
+```
+
 ### 任务
 
 #### 1. 将资源拆分到子模块
@@ -36,6 +49,9 @@ terraform apply -auto-approve
 | `aws_iam_user_policy` | `iam` |
 
 在根模块的 `challenge-3.5.tf` 中配置各子模块正确的 `source`。
+
+`data.aws_caller_identity.local` 和 `local_file.this` 保留在根模块：前者用于读取当前
+LocalStack 账号，后者将账号 ID 写入本地文件，不属于 compute 或 iam 子模块。
 
 #### 2. 创建共享 config 和 credentials 文件
 
@@ -71,6 +87,21 @@ terraform apply -target=local_file.this
 
 ```powershell
 terraform apply -auto-approve
+```
+
+根配置部署完成后，实际创建并由根 state 管理的 AWS 资源名称是：
+
+- Launch Template：`terraform-launch-template-35`
+- IAM User：`success-user-35`
+- IAM User Policy：`ec2-describe-policy-35`
+
+它们在 state 中的地址分别是 `aws_launch_template.this`、`aws_iam_user.lb` 和
+`aws_iam_user_policy.lb_ro`。例如可用以下命令查看实际名称，而非只看地址：
+
+```powershell
+terraform state show aws_launch_template.this
+terraform state show aws_iam_user.lb
+terraform state show aws_iam_user_policy.lb_ro
 ```
 
 #### 5. 忽略 Desired Capacity 变更

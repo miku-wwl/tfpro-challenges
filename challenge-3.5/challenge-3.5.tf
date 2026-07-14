@@ -27,7 +27,7 @@ provider "aws" {
 
 # Task 1: move this resource to modules/compute.
 resource "aws_launch_template" "this" {
-  name          = "terraform-launch-template"
+  name          = "terraform-launch-template-35"
   image_id      = "ami-00000000000000000"
   instance_type = "t2.micro"
 }
@@ -40,11 +40,11 @@ resource "terraform_data" "desired_capacity" {
 
 # Task 1: move these resources to modules/iam.
 resource "aws_iam_user" "lb" {
-  name = "success-user"
+  name = "success-user-35"
 }
 
 resource "aws_iam_user_policy" "lb_ro" {
-  name = "ec2-describe-policy"
+  name = "ec2-describe-policy-35"
   user = aws_iam_user.lb.name
 
   policy = jsonencode({
