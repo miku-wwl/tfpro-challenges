@@ -22,6 +22,11 @@
   * 一个 EC2 位于 `subnet-subnet1`（子网 ID 来自任务 2）。
   * 另一个 EC2 位于 `subnet-subnet2`（子网 ID 来自任务 2）。
 
+* 两个 EC2 实例使用相同的 AMI 和实例类型：
+  * `ami` 使用 LocalStack 中可用的 AMI ID，例如 `ami-00000000000000000`。
+  * `instance_type` 使用 `t2.micro`。
+* `subnet_id` 必须引用任务 2 的 Data Source 输出，不得硬编码子网 ID。
+
 > [!NOTE]
 > 必须通过查询 data source 引用 `subnet_id`，不得硬编码。
 
