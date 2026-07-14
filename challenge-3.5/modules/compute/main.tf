@@ -16,5 +16,8 @@ resource "aws_launch_template" "this" {
 # LocalStack Community does not include Auto Scaling. This resource represents
 # ASG desired capacity for the lifecycle/ignore_changes exercise in Task 5.
 resource "terraform_data" "desired_capacity" {
-  input = 1
+  input = 2
+  lifecycle {
+    ignore_changes = [input]
+  }
 }
