@@ -1,25 +1,50 @@
 terraform {
   required_providers {
     aws = {
-      source = "hashicorp/aws"
+      source  = "hashicorp/aws"
       version = "5.80.0"
     }
   }
 }
 
 provider "aws" {
- region = "us-east-1"
- default_tags {
-   tags = {
-     Environment = var.environement
-   }
- }
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+  s3_use_path_style           = true
+
+  endpoints {
+    ec2 = "http://localhost:4566"
+    iam = "http://localhost:4566"
+    s3  = "http://localhost:4566"
+    sts = "http://localhost:4566"
+  }
+
+  default_tags {
+    tags = {
+      Environment = var.environement
+    }
+  }
 }
+
 resource "random_pet" "this" {}
 
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["000000000000"]
+
+  filter {
+    name   = "image-id"
+    values = ["ami-6233d274fe437734e"]
+  }
+}
+
 resource "aws_instance" "this" {
-  ami = "ami-0ec10929233384c7f"
-  instance_type = "t2.micro"
+  ami                  = data.aws_ami.amazon_linux.id
+  instance_type        = "t2.micro"
   iam_instance_profile = aws_iam_instance_profile.test_profile.name
 }
 

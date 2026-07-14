@@ -53,6 +53,7 @@
 * 从 Terraform 配置中删除与 `aws_security_group` 和 `aws_vpc_security_group_ingress_rule` 资源类型有关的代码。
 * 删除 `terraform.tfstate` 文件及其备份文件 `terraform.tfstate.backup`（如果存在）。
 
+☆
 #### 5. 导入所有资源
 
 * 将步骤 1 中创建的所有 AWS 资源导入新的 Terraform state 文件。

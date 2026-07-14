@@ -8,6 +8,7 @@
 
 运行 `terraform apply -auto-approve` 部署所有资源。
 
+☆
 #### 2. 使用 Data Source 替换硬编码值
 
 使用 `aws_ami` data source 替换 `aws_instance` 资源中硬编码的 AMI ID，并动态获取该值。
