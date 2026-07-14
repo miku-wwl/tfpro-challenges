@@ -3,6 +3,7 @@
     "region": "us-east-1",
     "s3_buckets": ["kplabs-1","kplabs-2"],
     "org-name" : "kplabs",
+    "pet_id": "charmed-ghoul",
     "sg_name": "kplabs-sg",
     "s3_base_object": "base.txt"
 }

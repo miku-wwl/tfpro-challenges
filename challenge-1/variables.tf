@@ -11,6 +11,10 @@ variable "s3_base_object" {}
 
 variable "org-name" {}
 
+variable "pet_id" {
+  type = string
+}
+
 variable "region" {
   type = string
 }

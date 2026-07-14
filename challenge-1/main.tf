@@ -29,11 +29,9 @@ provider "aws" {
     }
   }
 }
-resource "random_pet" "this" {}
-
 resource "aws_iam_user" "lb" {
   count = 3
-  name  = "${random_pet.this.id}-${var.org-name}-${count.index}"
+  name  = "${var.pet_id}-${var.org-name}-${count.index}"
 }
 
 output "user_names" {
@@ -64,7 +62,7 @@ resource "aws_iam_user_policy" "lb_ro" {
 
 resource "aws_s3_bucket" "example" {
   for_each = toset(var.s3_buckets)
-  bucket   = "${random_pet.this.id}-${each.value}"
+  bucket   = "${var.pet_id}-${each.value}"
 }
 
 output "s3_buckets" {
@@ -77,24 +75,23 @@ resource "aws_s3_object" "object" {
   key      = var.s3_base_object
 }
 
-# resource "aws_security_group" "example" {
-#   name = var.sg_name
-# }
+resource "aws_security_group" "example" {
+  name = var.sg_name
+}
 
-# output "sg_id" {
-#   # value = aws_security_group.example.name
-#   value = aws_security_group.example.id
-# }
+output "sg_id" {
+  value = aws_security_group.example.id
+}
 
-# resource "aws_vpc_security_group_ingress_rule" "example" {
-#   security_group_id = aws_security_group.example.id
+resource "aws_vpc_security_group_ingress_rule" "example" {
+  security_group_id = aws_security_group.example.id
 
-#   cidr_ipv4   = "10.0.0.0/8"
-#   from_port   = 80
-#   ip_protocol = "tcp"
-#   to_port     = 80
-# }
+  cidr_ipv4   = "10.0.0.0/8"
+  from_port   = 80
+  ip_protocol = "tcp"
+  to_port     = 80
+}
 
-# output "sg_rule_id" {
-#   value = aws_vpc_security_group_ingress_rule.example.id
-# }
+output "sg_rule_id" {
+  value = aws_vpc_security_group_ingress_rule.example.id
+}
