@@ -9,7 +9,7 @@ terraform {
 
 resource "aws_launch_template" "this" {
   name          = var.name
-  image_id      = var.image_id  
+  image_id      = var.image_id
   instance_type = var.instance_type
 }
 

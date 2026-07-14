@@ -25,17 +25,35 @@ provider "aws" {
   }
 }
 
+provider "aws" {
+  alias   = "read_only"
+  profile = "ro_user"
+  region  = "us-east-1"
+
+  shared_config_files      = ["${path.root}/.aws/conf"]
+  shared_credentials_files = ["${path.root}/.aws/credentials"]
+
+  assume_role {
+    role_arn = "arn:aws:iam::000000000000:role/ReadOnlyRoleChallenge35"
+  }
+
+  endpoints {
+    iam = "http://localhost:4566"
+    sts = "http://localhost:4566"
+  }
+}
+
 module "compute" {
-  source = "./modules/compute"
-  name = "terraform-launch-template-35"
-  image_id = "ami-00000000000000000"
+  source        = "./modules/compute"
+  name          = "terraform-launch-template-35"
+  image_id      = "ami-00000000000000000"
   instance_type = "t2.micro"
 }
 
 
 module "iam" {
-  source = "./modules/iam"
-  iam_user_name = "success-user-35"
+  source               = "./modules/iam"
+  iam_user_name        = "success-user-35"
   iam_user_policy_name = "ec2-describe-policy-35"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -47,7 +65,9 @@ module "iam" {
   })
 }
 
-data "aws_caller_identity" "local" {}
+data "aws_caller_identity" "local" {
+  provider = aws.read_only
+}
 
 resource "local_file" "this" {
   content  = data.aws_caller_identity.local.account_id
