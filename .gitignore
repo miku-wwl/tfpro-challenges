@@ -1,0 +1,7 @@
+# Terraform working directories
+.terraform/
+
+# Terraform state and local provider lock files
+*.tfstate
+*.tfstate.*
+*.terraform.lock.hcl
