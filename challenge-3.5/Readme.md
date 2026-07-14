@@ -53,6 +53,7 @@ terraform state list
 `data.aws_caller_identity.local` 和 `local_file.this` 保留在根模块：前者用于读取当前
 LocalStack 账号，后者将账号 ID 写入本地文件，不属于 compute 或 iam 子模块。
 
+☆
 #### 2. 创建共享 config 和 credentials 文件
 
 在当前目录创建 `.aws/conf` 和 `.aws/credentials`。
