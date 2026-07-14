@@ -1,20 +1,19 @@
-## Challenge 3.5 — LocalStack Community edition
+## Challenge 3.5 — LocalStack Community 版本
 
-This is a LocalStack-compatible version of Challenge 3. It preserves the same
-module, shared-credential, multi-provider, targeted-apply, and lifecycle
-exercises. LocalStack Community does not include Auto Scaling, so the ASG is
-replaced by a `terraform_data` desired-capacity controller.
+这是 Challenge 3 的 LocalStack 兼容版本。它保留了模块拆分、共享
+credentials/config、多 Provider、定向部署和生命周期管理练习。由于 LocalStack
+Community 不支持 Auto Scaling，原 ASG 资源由 `terraform_data` 容量控制器替代。
 
-### Base infrastructure
+### 基础设施
 
-Before Task 1, run the following from `base-folder`:
+开始任务 1 前，请在 `base-folder` 目录中执行：
 
 ```powershell
 terraform init
 terraform apply -auto-approve
 ```
 
-This creates three LocalStack IAM roles, two users, and their access keys:
+这会在 LocalStack 中创建三个 IAM Role、两个用户及其 Access Key：
 
 - `EC2FullAccessChallenge35`
 - `IAMFullAccessChallenge35`
@@ -22,69 +21,69 @@ This creates three LocalStack IAM roles, two users, and their access keys:
 - `kplabs-challenge35-user`
 - `ro-user-challenge35`
 
-### Tasks
+### 任务
 
-#### 1. Split resources into child modules
+#### 1. 将资源拆分到子模块
 
-Move resources from `challenge-3.5.tf` (not `base-folder`) into child modules
-under `modules`.
+将 `challenge-3.5.tf`（不是 `base-folder`）中的资源移动到 `modules`
+目录下的子模块。
 
-| Resource type | Module directory |
+| 资源类型 | 子模块目录 |
 | :--- | :---: |
 | `aws_launch_template` | `compute` |
 | `terraform_data` | `compute` |
 | `aws_iam_user` | `iam` |
 | `aws_iam_user_policy` | `iam` |
 
-Configure the module sources in the root `challenge-3.5.tf` file.
+在根模块的 `challenge-3.5.tf` 中配置各子模块正确的 `source`。
 
-#### 2. Create shared config and credentials files
+#### 2. 创建共享 config 和 credentials 文件
 
-Create `.aws/conf` and `.aws/credentials` in this directory.
+在当前目录创建 `.aws/conf` 和 `.aws/credentials`。
 
-- `conf` may contain only the `compute` and `iam` profiles.
-- Both profiles use `us-east-1`.
-- `compute` assumes `EC2FullAccessChallenge35`.
-- `iam` assumes `IAMFullAccessChallenge35`.
-- Both use the credentials of `kplabs-challenge35-user` as their source
-  credentials.
+- `conf` 中只能包含 `compute` 和 `iam` 两个 profile。
+- 两个 profile 均使用 `us-east-1` Region。
+- `compute` Assume `EC2FullAccessChallenge35`。
+- `iam` Assume `IAMFullAccessChallenge35`。
+- 两者都使用 `kplabs-challenge35-user` 的凭证作为源凭证。
 
-#### 3. Add provider configurations
+#### 3. 添加 Provider 配置
 
-- The compute module uses the `compute` profile.
-- The IAM module uses the `iam` profile.
-- `data.aws_caller_identity.local` assumes `ReadOnlyRoleChallenge35`, using
-  credentials for `ro-user-challenge35`.
-- Every AWS provider configuration must use the LocalStack endpoint
-  `http://localhost:4566`.
+- compute 子模块使用 `compute` profile。
+- IAM 子模块使用 `iam` profile。
+- `data.aws_caller_identity.local` 应使用 `ro-user-challenge35` 的凭证
+  Assume `ReadOnlyRoleChallenge35`。
+- 所有 AWS provider 配置都必须使用 LocalStack endpoint：
+  `http://localhost:4566`。
 
-#### 4. Deploy resources
+#### 4. 部署资源
 
-First create only the local file:
+先只创建本地文件：
 
 ```powershell
 terraform apply -target=local_file.this
 ```
 
-Verify that `account-number.txt` contains LocalStack account ID `000000000000`.
-Then deploy the remaining resources:
+确认 `account-number.txt` 已创建，且内容是 LocalStack Account ID：
+`000000000000`。
+
+然后部署其余资源：
 
 ```powershell
 terraform apply -auto-approve
 ```
 
-#### 5. Ignore desired-capacity changes
+#### 5. 忽略 Desired Capacity 变更
 
-Change the capacity-controller value from `1` to `2`.
-Add a lifecycle rule that ignores changes to that value. A subsequent plan must
-not update the resource, and its state must retain the initial value `1`.
+将容量控制器的值从 `1` 改为 `2`。添加生命周期规则来忽略该值的变化。
+后续 plan 不应更新该资源，state 中仍应保留初始值 `1`。
 
-This replaces the original ASG `desired_capacity` exercise while retaining the
-same Terraform lifecycle concept.
+该任务替代原 Challenge 3 中 ASG 的 `desired_capacity` 练习，但保留相同的
+Terraform 生命周期管理概念。
 
-### Cleanup
+### 清理
 
-Destroy both the root configuration and `base-folder` resources when finished.
+完成后销毁根配置和 `base-folder` 中创建的资源：
 
 ```powershell
 terraform destroy -auto-approve
