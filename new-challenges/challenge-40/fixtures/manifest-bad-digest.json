@@ -1,0 +1,8 @@
+{
+  "schema_version": "release-manifest/v1",
+  "contract_version": 1,
+  "release_version": "2026.07.1",
+  "artifacts": [
+    { "name": "api", "key": "releases/api/current.txt", "source": "payloads/api-v1.txt", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
+  ]
+}

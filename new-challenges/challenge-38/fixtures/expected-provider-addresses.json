@@ -1,0 +1,10 @@
+{
+  "data.aws_ami.primary": "aws",
+  "data.aws_caller_identity.primary": "aws",
+  "data.aws_iam_session_context.primary": "aws",
+  "data.aws_ami.dr": "aws.dr",
+  "data.aws_caller_identity.dr": "aws.dr",
+  "data.aws_iam_session_context.dr": "aws.dr",
+  "aws_vpc.primary": "aws",
+  "aws_vpc.dr": "aws.dr"
+}

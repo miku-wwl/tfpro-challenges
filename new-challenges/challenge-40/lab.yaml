@@ -1,0 +1,35 @@
+id: challenge-40
+title: 双 State 制品合同发布与运行时晋级 Capstone
+score: 98
+exam_timebox: 75m
+study_timebox: 150m
+runtime: localstack
+services:
+  - s3
+  - ec2
+  - iam
+  - sts
+concepts:
+  - terraform_remote_state
+  - versioned-release-contract
+  - manifest-validation
+  - provider-aliases
+  - nested-modules
+  - stable-for-each
+  - saved-plan-json-gate
+  - controlled-replacement
+  - drift-recovery
+objectives:
+  - Publish manifest-driven S3 objects and a versioned release contract from an artifact state
+  - Consume only the release contract through terraform_remote_state from an independent runtime state
+  - Route primary and DR workloads through explicit providers and a reusable regional module
+  - Preserve fleet and replica identity when the runtime catalog is reordered
+  - Gate saved plans and prove a release upgrade causes only the intended runtime rollout
+  - Recover drift and destroy the two states in reverse dependency order
+invariants:
+  - Artifact and runtime roots own independent local state files
+  - Runtime never reads artifact files or S3 objects directly
+  - Every AWS request uses loopback LocalStack and literal test credentials
+  - Fleet identity is name@location and replica identity is name@location#NN
+  - Saved release plans reject actions outside the declared allowlist
+  - Runtime is destroyed before artifact

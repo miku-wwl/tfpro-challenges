@@ -1,0 +1,6 @@
+{
+  "schema_version": "runtime-catalog/v1",
+  "fleets": [
+    { "name": "api", "location": "edge", "artifact": "api", "instance_type": "t3.micro", "replicas": 1 }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": "runtime-catalog/v1",
+  "fleets": [
+    { "name": "api", "location": "primary", "artifact": "api", "instance_type": "m5.24xlarge", "replicas": 1 }
+  ]
+}

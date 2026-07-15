@@ -1,0 +1,3 @@
+[
+  {"artifact_id":"api-config","source":"artifacts/api-config.json","object_key":"services/api/config.json","content_type":"","owner":"platform","enabled":true}
+]

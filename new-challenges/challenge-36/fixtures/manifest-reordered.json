@@ -1,0 +1,6 @@
+[
+  {"artifact_id":"disabled-sample","source":"artifacts/disabled.txt","object_key":"disabled/sample.txt","content_type":"text/plain","owner":"release","enabled":false},
+  {"artifact_id":"release-notes","source":"artifacts/release-notes.txt","object_key":"releases/notes.txt","content_type":"text/plain","owner":"release","enabled":true},
+  {"artifact_id":"api-config","source":"artifacts/api-config.json","object_key":"services/api/config.json","content_type":"application/json","owner":"platform","enabled":true},
+  {"artifact_id":"worker-bootstrap","source":"artifacts/worker-bootstrap.sh","object_key":"services/worker/bootstrap.sh","content_type":"text/x-shellscript","owner":"compute","enabled":"true"}
+]
