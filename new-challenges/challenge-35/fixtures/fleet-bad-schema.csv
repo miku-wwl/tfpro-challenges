@@ -1,0 +1,2 @@
+name,environment,location,instance_type,enabled
+api,prod,primary,t3.micro,true

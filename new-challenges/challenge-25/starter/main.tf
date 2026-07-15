@@ -1,36 +1,30 @@
 locals {
-  config_raw = file(var.config_path)
-  config     = jsondecode(local.config_raw)
-  digest     = sha256(local.config_raw)
+  config           = jsondecode(file(var.config_path))
+  canonical_config = jsonencode(local.config)
+  config_sha256    = sha256(local.canonical_config)
+  revision_id      = "v${var.config_version}-${local.config_sha256}"
+  bucket_name      = "${var.name_prefix}-${var.environment}-config"
 }
-
-# TODO: 添加配置合同 check 和 terraform_data.config_revision。
 
 resource "aws_s3_bucket" "config" {
-  bucket = "${var.name_prefix}-${var.environment}-config"
+  bucket = local.bucket_name
 
-  # TODO: 保护关键 bucket，禁止普通 destroy。
-}
-
-resource "aws_dynamodb_table" "config" {
-  name         = "${var.name_prefix}-${var.environment}-config"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "ConfigKey"
-
-  attribute {
-    name = "ConfigKey"
-    type = "S"
+  tags = {
+    Challenge = "25"
+    ManagedBy = "terraform"
+    RunId     = var.name_prefix
+    Role      = "config"
   }
 }
 
-resource "aws_s3_object" "config" {
-  bucket       = aws_s3_bucket.config.id
-  key          = "config/current.json"
-  content      = local.config_raw
-  content_type = "application/json"
+# TODO: publish one immutable revision object with a revision_id keyed for_each map.
+# TODO: publish one stable revision-pointer object that changes with revision identity.
 
-  # TODO: replace_triggered_by、precondition、postcondition。
+resource "aws_s3_object" "current" {
+  bucket = aws_s3_bucket.config.id
+  key    = "config/current.json"
+
+  # TODO: publish canonical JSON with etag/source_hash/tags.
+  # TODO: add contract preconditions, content-type postcondition,
+  # and replace_triggered_by the stable revision-pointer resource.
 }
-
-# TODO: 创建与 S3 版本/摘要一致的 aws_dynamodb_table_item。
-

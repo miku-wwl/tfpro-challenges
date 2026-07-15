@@ -1,68 +1,35 @@
-# Challenge 16：Terraform CLI 自动化与故障恢复
+# Challenge 16：Saved Plan、Refresh-only 与真实 S3 漂移恢复
 
-难度：**91 / 100**　建议用时：**90 分钟**
+难度：**95 / 100**；考纲契合度：**A**；考试模式 **75 分钟**，首次完整学习 **120 分钟**。
 
-## 场景
+JSON service catalog 要发布为一个真实 S3 inventory。候选人只修改 `starter/` Terraform HCL；saved
+plan、exit code、state inspection、refresh-only 和 drift 注入全部由 grader 驱动，不要求编写 PowerShell，
+也不允许 `state push/rm` 之类破坏性恢复。
 
-发布流水线要管理一份本地 service inventory。旧脚本直接 `apply -auto-approve`，既没有保存/审计 plan，也把 `-detailed-exitcode` 的 `2` 当成错误；值班手册还在 state 损坏时建议重新 apply。你要实现可审计、可恢复、可重复运行的 PowerShell 工作流。
+## Terraform 任务
 
-本题只创建临时目录中的 `terraform_data`、`local_file` 和 local state，不使用云 provider。
-
-## 开始
-
-```powershell
-cd tmp2/challenge-16/starter
-terraform init
-pwsh ../tests/grade.ps1 -Root .
-```
-
-只修改 `starter/`。grader 会把候选目录和 fixtures 复制到 OS 临时目录，所有 state 操作都发生在副本中。
-
-## 任务
-
-1. 把 catalog 转换为按 service name 建 key 的 map；停用 service 不进入资源图，CSV/JSON 顺序变化不改变地址。
-2. 完成 environment validation，并输出排序后的 service name 与完整资源地址。
-3. 完成 `scripts/operate.ps1`：
-   - `terraform init -input=false`；
-   - `plan -detailed-exitcode -out=...`，正确区分 `0`（无变化）、`1`（错误）、`2`（有变化）；
-   - `terraform show -json` 审计 saved plan，拒绝首次 plan 中的 delete；
-   - 只 apply 已审计的 saved plan，随后证明 clean plan 返回 `0`；
-   - `terraform state pull` 创建显式备份，模拟 `state rm` 后用 `state push -force` 恢复，并证明地址恢复；
-   - 外部修改 inventory 文件，使用 `plan/apply -refresh-only` 记录 drift，再生成、审计并应用 repair saved plan；
-   - 写入 `.automation/evidence.json`，字段合同见 grader 错误信息。
-4. 所有外部命令都检查 exit code；脚本中不得删除调用方传入的 workspace。
-
-## `-detailed-exitcode` 合同
-
-| Exit code | 含义 | 自动化动作 |
-|---:|---|---|
-| 0 | plan 无变化 | 成功，无需 apply |
-| 1 | Terraform 错误 | 立即失败 |
-| 2 | plan 有变化 | 审计 JSON 后才可 apply |
+1. `jsondecode(file(...))` 后规范化 service，独立拒绝空 catalog、重复 name、非法字段和无 enabled service。
+2. enabled service 以 name 作为稳定 `for_each` key；输入数组重排不得改变地址或 canonical SHA-256。
+3. 创建一个 `aws_s3_bucket.inventory`、每服务一个 `aws_s3_object.service` 和一个 canonical index object。
+4. service object 设置 JSON content、`etag = md5(...)`、metadata 与 tags，确保内容/标签漂移可被刷新和修复。
+5. 输出排序 names、bucket/index、canonical SHA-256 和精确 managed address contract。
+6. AWS provider 只使用字面量 `test/test`、S3/STS loopback endpoint、path-style 和三项 skip flags。
 
 ## 验收
 
 ```powershell
-terraform fmt -check -recursive .
-terraform validate
-pwsh ../tests/grade.ps1 -Root .
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1
 ```
 
-`grade.ps1` 会实际走完 saved plan、JSON audit、state backup/restore、refresh-only 与 repair 流程。
+grader 执行 **7 个 Terraform 1.6.6 普通 plan tests**（无 mock/override），再真实执行：初始 saved plan
+JSON 审计与同文件 apply、clean/reorder exit code 0、`state pull` 只读备份、AWS CLI 篡改对象正文与 tags、
+saved refresh-only plan/apply、只更新一个对象的 saved repair plan、clean plan、saved destroy 和零残留。
 
-## 不变量
+## 考纲映射
 
-- 只有被审计的 `.tfplan` 可以进入 apply。
-- state backup 必须在破坏性 state 子命令之前落盘且非空。
-- `refresh-only` 只记录现实，不应暗中修改配置。
-- state 恢复后 service 地址集合与恢复前一致；最终普通 plan exit code 为 `0`。
+- **1b–1e**：saved plan/apply/destroy、state inspection、refresh-only 与 drift reconciliation；
+- **2a / 2c / 2d / 2e**：checks、JSON/HCL 函数、稳定 `for_each`、复杂 outputs；
+- **3c**：自动化中的 detailed exit code、plan JSON 和 immutable saved plan；
+- **5b / 5c / 5d**：AWS provider、测试凭证与 endpoint 排障。
 
-## 安全边界
-
-- grader 只使用自己创建并验证过路径的临时目录，结束后清理该目录。
-- 不使用真实 backend、不运行 `state push` 到远程 workspace。
-- 不把 `.tfstate`、plan JSON、plan binary 或生成 inventory 提交到版本库。
-
-## Terraform Professional objective
-
-覆盖 Professional 大纲中的 CLI automation、saved plan contract、machine-readable JSON、drift/refresh-only、state inspection/backup/recovery、资源身份稳定性，以及自动化失败语义。
+Candidate workload 只使用公开考试资源清单中的 `aws_s3_bucket` 和 `aws_s3_object`。

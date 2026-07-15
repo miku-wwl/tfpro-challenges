@@ -1,6 +1,1 @@
-output "release_identity" {
-  value = "${var.release_version}:${local.digest}"
-}
-
-# TODO: 输出 bucket_name、object_key、topic_arn、managed_addresses。
-
+# TODO 6: 输出 artifact_names、bucket_name、object_keys、managed_addresses 和 release_contract。

@@ -1,6 +1,5 @@
-rule_id,direction,protocol,from_port,to_port,cidr,description,enabled
-disabled-http,ingress,tcp,80,80,10.30.0.0/24,disabled sample,false
-https-egress,egress,tcp,443,443,0.0.0.0/0,approved HTTPS,true
-dns-udp,ingress,udp,53,53,10.10.0.0/16,service DNS,true
-web-tls,ingress,tcp,443,443,10.10.0.0/16,application TLS,true
-admin-ssh,ingress,tcp,22,22,10.20.0.0/24,administration,true
+rule_id,protocol,from_port,to_port,cidr,description,enabled
+disabled-http,tcp,80,80,10.30.0.0/24,disabled sample,false
+dns-udp,udp,53,53,10.10.0.0/16,service DNS,true
+web-tls,tcp,443,443,10.10.0.0/16,application TLS,true
+admin-ssh,tcp,22,22,10.20.0.0/24,administration,true

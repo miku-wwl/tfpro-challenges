@@ -1,27 +1,25 @@
-# Challenge 31：CSV 驱动的 EC2 计算舰队
+# Challenge 31：CSV 驱动的官方 EC2 发布图
 
-**难度：96 / 100（Terraform Professional = 100）**  
-**建议时间：120 分钟**
+难度：**95 / 100**；考试模式 **70 分钟**，首次完整学习 **120 分钟**。评级：**A**。
 
-平台团队把计算舰队写在 CSV 中。你需要将弱类型表格转换成稳定的 Terraform graph，并同时处理 AWS data source、launch template、实例扩展与容量合同。
+grader 在 LocalStack 外部预置一个 VPC 与两个 subnet。候选配置通过官方
+`data.aws_subnet` 查询网络，以 `data.aws_ami` 选择镜像，再为目标环境的每个启用 fleet
+创建一个 security group、launch template 与 EC2 instance。候选不管理网络、不模拟
+Auto Scaling，也不实现自定义 capacity/replica 控制面。
 
-完成 `starter/`：
+只修改 `starter/`：
 
-1. 严格校验 `environment`、网络对象、CSV 路径以及 loopback LocalStack endpoint。
-2. 标准化 CSV 中的布尔值和数字；仅选择目标环境且 `enabled=true` 的记录。
-3. `fleet_id` 必须是 launch template 与 security group 的唯一 `for_each` key；实例必须使用 `fleet_id/ordinal` 复合 key。CSV 重排不能改变地址。
-4. 使用 `data.aws_ami` 选择可用镜像，并用 `data.aws_vpc`、`data.aws_subnet` 回读真实网络。
-5. 用显式 `check` 拒绝重复 ID、非法容量关系、未知 subnet、非法布尔值以及空 owner/instance type。
-6. 每个 launch template 必须连接正确的 SG、AMI 与 instance type；`aws_instance` 必须引用 launch template 的 `$Latest` 版本、对应 subnet，并按 `desired_capacity` 展开。
-7. 输出稳定排序的 fleet IDs、resource addresses 与容量合同。
-8. 所有本题 AWS 资源都必须带 `RunId = var.run_id`，以支持 grader 的精确清理。
-
-Canonical tests 精确包含 11 个 run，覆盖正常输入、CSV 重排、非法环境、重复 ID、容量越界、未知 subnet、不存在的 CSV、非 loopback endpoint、非法 enabled、空 owner/type 与非法 network。
-
-grader 会在真实 LocalStack 中创建 1 个 VPC、2 个 subnet、2 个 security group、2 个 launch template 与 3 个 EC2 instance，随后验证远端属性、clean plan、destroy 与零残留。LocalStack Community 创建实例后不会回读其 launch-template 来源，并会把 launch template 顶层 tags 回读成额外 tag specification；你需要用窄范围 `ignore_changes` 消除这两项模拟器噪声，并以 `terraform_data` revision sentinel 配合 `replace_triggered_by` 保留模板变更触发实例替换的语义。
+1. 严格规范化 CSV 的六字段 schema；独立拒绝空目录、重复 `fleet_id`、非法环境/布尔值、空字段、非法 instance type 与未知 subnet key。
+2. `subnet_ids` 由 grader 注入；只用 `data.aws_subnet.selected` 回读 subnet/VPC，不创建 VPC/subnet。
+3. `data.aws_ami.selected` 必须查询真实 LocalStack AMI；禁止硬编码 AMI ID。
+4. 以 `fleet_id` 作为三个 AWS resources 的唯一 `for_each` key；CSV 重排不得改变地址。
+5. security group 与 instance 携带精确 RunId/Owner/FleetId tags；launch template 用稳定名称与输出合同审计，instance tag 还引用真实 launch-template ID 形成图边。
+6. 输出排序 fleet IDs、三类精确地址、AMI/subnet/VPC/resource IDs 合同。
+7. provider 只使用 LocalStack `ec2,sts` endpoint、字面量 `test/test` 与三项 skip flags；AWS managed/data graph 只用公开 Professional 清单资源。
+8. grader 使用 Terraform 1.6.6 运行 10 个无 mock/override canonical runs，随后审计 saved-plan JSON、真实 EC2/LT/SG 属性、reorder no-op、instance tag drift 修复、clean plan、destroy 与零残留。
 
 ```powershell
-pwsh ./tmp2/challenge-31/tests/grade.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1
 ```
 
-fixtures 是只读输入合同。禁止真实 AWS 凭证、非本机 endpoint、行号 key 或吞掉失败的检查。
+对应大纲：**1b/1c/1d/1e、2a/2b/2c/2d/2e、3c、5b/5c**。

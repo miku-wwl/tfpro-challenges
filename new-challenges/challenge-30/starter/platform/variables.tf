@@ -1,18 +1,3 @@
-variable "run_id" {
-  type    = string
-  default = "tfpro-c30"
-
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{4,16}[a-z0-9]$", var.run_id))
-    error_message = "run_id must be 6-18 lowercase letters, digits, or hyphens."
-  }
-}
-
-variable "foundation_state_path" {
-  type    = string
-  default = "../foundation/terraform.tfstate"
-}
-
 variable "primary_region" {
   type    = string
   default = "us-east-1"
@@ -21,19 +6,29 @@ variable "primary_region" {
 variable "dr_region" {
   type    = string
   default = "us-west-2"
-
-  validation {
-    condition     = var.dr_region != var.primary_region
-    error_message = "dr_region must differ from primary_region."
-  }
 }
 
 variable "localstack_endpoint" {
   type    = string
   default = "http://localhost:4566"
+}
 
-  validation {
-    condition     = can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]+$", var.localstack_endpoint))
-    error_message = "localstack_endpoint must be a loopback HTTP endpoint."
-  }
+variable "name_prefix" {
+  type    = string
+  default = "tfpro-c30"
+}
+
+variable "run_id" {
+  type    = string
+  default = "manual-c30"
+}
+
+variable "state_bucket" {
+  type    = string
+  default = "replace-me"
+}
+
+variable "foundation_state_key" {
+  type    = string
+  default = "foundation.tfstate"
 }

@@ -1,163 +1,64 @@
-mock_provider "aws" {
-  mock_data "aws_ami" {
-    defaults = { id = "ami-primary" }
-  }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-primary" }
-  }
-  mock_resource "aws_instance" {
-    defaults = { id = "i-primary" }
-  }
-}
-
-mock_provider "aws" {
-  alias = "dr"
-  mock_data "aws_ami" {
-    defaults = { id = "ami-dr" }
-  }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-dr" }
-  }
-  mock_resource "aws_instance" {
-    defaults = { id = "i-dr" }
-  }
-}
-
-run "stable_dual_region_fleet_contract" {
+run "stable_dual_region_contract" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = {
-      outputs = {
-        compute_contract = {
-          contract_version = 1
-          primary          = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }
-          dr               = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }
-          identity         = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" }
-        }
-      }
-    }
-  }
-
   assert {
-    condition     = join(",", output.fleet_keys) == "api@dr,api@primary,worker@primary"
-    error_message = "Filtering or stable fleet identity is wrong."
+    condition     = toset(output.fleet_keys) == toset(["api@primary", "api@dr", "worker@primary"])
+    error_message = "stable name@location keys are wrong"
   }
   assert {
     condition     = output.fleet_contracts["api@primary"].role == "primary" && output.fleet_contracts["api@dr"].role == "dr"
-    error_message = "A fleet was routed to the wrong provider role."
+    error_message = "fleet provider routing is wrong"
   }
   assert {
-    condition     = output.fleet_contracts["api@primary"].subnet_id == "subnet-primary" && output.fleet_contracts["api@dr"].subnet_id == "subnet-dr"
-    error_message = "A fleet consumed the wrong regional subnet."
+    condition     = length(output.resource_addresses) == 6 && length(output.instance_ids) == 3
+    error_message = "one launch template and instance are required per fleet"
   }
   assert {
-    condition     = join(",", sort(keys(output.replica_ids))) == "api@dr#01,api@primary#01,worker@primary#01,worker@primary#02"
-    error_message = "Replica keys must be stable name@location#NN identities."
+    condition     = toset(output.fleets_by_owner.platform) == toset(["api@primary", "api@dr"])
+    error_message = "owner grouping is incomplete"
   }
+}
+
+run "reordered_catalog_is_stable" {
+  command = plan
+  variables { fleet_csv_path = "../../fixtures/fleet-reordered.csv" }
   assert {
-    condition     = output.fleet_contracts["worker@primary"].desired_capacity == 2 && length(output.fleet_contracts["worker@primary"].instance_ids) == 2
-    error_message = "Desired capacity must behaviorally expand worker into two replicas."
-  }
-  assert {
-    condition     = join(",", output.fleets_by_owner.platform) == "api@dr,api@primary"
-    error_message = "Owner grouping is incomplete or unstable."
+    condition     = toset(output.fleet_keys) == toset(["api@primary", "api@dr", "worker@primary"]) && length(output.resource_addresses) == 6
+    error_message = "CSV reorder changed graph identity"
   }
 }
 
-run "reordered_csv_is_zero_identity_change" {
+run "duplicate_key_is_rejected" {
   command = plan
-  variables {
-    fleet_csv_path = "../../fixtures/fleet-reordered.csv"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  assert {
-    condition     = join(",", output.fleet_keys) == "api@dr,api@primary,worker@primary"
-    error_message = "CSV row order changed fleet identity."
-  }
-  assert {
-    condition     = join(",", sort(keys(output.replica_ids))) == "api@dr#01,api@primary#01,worker@primary#01,worker@primary#02"
-    error_message = "CSV row order changed replica identity."
-  }
+  variables { fleet_csv_path = "../../fixtures/fleet-duplicate.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_unknown_environment" {
+run "invalid_location_is_rejected" {
   command = plan
-  variables {
-    target_environment = "qa"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [var.target_environment]
+  variables { fleet_csv_path = "../../fixtures/fleet-invalid-location.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_unknown_location" {
+run "invalid_name_is_rejected" {
   command = plan
-  variables {
-    fleet_csv_path = "../../fixtures/fleet-invalid-location.csv"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { fleet_csv_path = "../../fixtures/fleet-invalid-name.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_invalid_fleet_name" {
+run "invalid_instance_type_is_rejected" {
   command = plan
-  variables {
-    fleet_csv_path = "../../fixtures/fleet-invalid-name.csv"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { fleet_csv_path = "../../fixtures/fleet-invalid-instance-type.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_duplicate_fleet_key" {
+run "invalid_boolean_is_rejected" {
   command = plan
-  variables {
-    fleet_csv_path = "../../fixtures/fleet-duplicate.csv"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { fleet_csv_path = "../../fixtures/fleet-invalid-enabled.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_invalid_capacity" {
+run "bad_schema_is_rejected" {
   command = plan
-  variables {
-    fleet_csv_path = "../../fixtures/fleet-invalid-capacity.csv"
-  }
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { fleet_csv_path = "../../fixtures/fleet-bad-schema.csv" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_incompatible_contract_version" {
+run "no_enabled_fleet_is_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 2, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-west-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_contract_region_mismatch" {
-  command = plan
-  override_data {
-    target = data.terraform_remote_state.foundation
-    values = { outputs = { compute_contract = { contract_version = 1, primary = { region = "us-east-1", vpc_id = "vpc-primary", subnet_id = "subnet-primary", security_group_id = "sg-primary", cidr = "10.35.0.0/16" }, dr = { region = "us-east-2", vpc_id = "vpc-dr", subnet_id = "subnet-dr", security_group_id = "sg-dr", cidr = "10.36.0.0/16" }, identity = { role_name = "compute-role", role_arn = "arn:mock", instance_profile_name = "compute-profile" } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { fleet_csv_path = "../../fixtures/fleet-no-enabled.csv" }
+  expect_failures = [output.catalog_guard]
 }

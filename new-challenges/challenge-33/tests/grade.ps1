@@ -1,354 +1,210 @@
 [CmdletBinding()]
 param(
-  [string]$Candidate = (Join-Path $PSScriptRoot "..\starter"),
-  [string]$LocalstackEndpoint = "http://localhost:4566",
-  [switch]$SkipE2E
+  [string]$Candidate = (Join-Path $PSScriptRoot '..\starter'),
+  [string]$LocalstackEndpoint = 'http://localhost:4566',
+  [switch]$UnitOnly
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Assert-LoopbackEndpoint([string]$Endpoint) {
-  if ($Endpoint -notmatch '^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?/?$') {
-    throw "拒绝不规范或非 loopback endpoint：$Endpoint"
-  }
-  try { $uri = [Uri]$Endpoint }
-  catch { throw "LocalStack endpoint 不是合法 URI：$Endpoint" }
-  if (-not $uri.IsAbsoluteUri -or $uri.Scheme -notin @("http", "https") -or $uri.DnsSafeHost -notin @("localhost", "127.0.0.1", "::1") -or
-    $uri.UserInfo -ne '' -or $uri.AbsolutePath -ne '/' -or $uri.Query -ne '' -or $uri.Fragment -ne '' -or $uri.Port -lt 1 -or $uri.Port -gt 65535 -or
-    $Endpoint -match '(?i)%2e|%2f|%5c|\\') {
-    throw "拒绝包含凭证、路径、查询、fragment 或归一化绕过的 endpoint：$Endpoint"
+function Assert-Endpoint([string]$Value) {
+  if ($Value -notmatch '^https?://(?:localhost|127\.0\.0\.1|\[::1\]):[0-9]{1,5}$') { throw "Unsafe LocalStack endpoint: $Value" }
+  try { $uri = [Uri]$Value } catch { throw "Invalid LocalStack endpoint: $Value" }
+  if (-not $uri.IsAbsoluteUri -or $uri.Scheme -notin @('http','https') -or $uri.DnsSafeHost -notin @('localhost','127.0.0.1','::1') -or
+      $uri.UserInfo -ne '' -or $uri.AbsolutePath -ne '/' -or $uri.Query -ne '' -or $uri.Fragment -ne '' -or $uri.Port -lt 1 -or $uri.Port -gt 65535) {
+    throw "Unsafe LocalStack endpoint: $Value"
   }
 }
 
-function Remove-HclComments([string]$Text) {
-  $builder = [Text.StringBuilder]::new($Text.Length)
-  $state = "code"
-  for ($i = 0; $i -lt $Text.Length; $i++) {
-    $current = $Text[$i]
-    $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
-    if ($state -eq "code") {
-      if ($current -eq '"') { [void]$builder.Append($current); $state = "string" }
-      elseif ($current -eq '#') { [void]$builder.Append(' '); $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '*') { [void]$builder.Append("  "); $i++; $state = "block" }
-      else { [void]$builder.Append($current) }
-    }
-    elseif ($state -eq "string") {
-      [void]$builder.Append($current)
-      if ($current -eq '\' -and $i + 1 -lt $Text.Length) { $i++; [void]$builder.Append($Text[$i]) }
-      elseif ($current -eq '"') { $state = "code" }
-    }
-    elseif ($state -eq "line") {
-      if ($current -eq "`n") { [void]$builder.Append($current); $state = "code" }
-      else { [void]$builder.Append(' ') }
-    }
-    else {
-      if ($current -eq '*' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "code" }
-      elseif ($current -eq "`n") { [void]$builder.Append($current) }
-      else { [void]$builder.Append(' ') }
-    }
-  }
-  return $builder.ToString()
+function Invoke-Native([string]$File, [string[]]$Arguments, [int[]]$Allowed = @(0)) {
+  $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  $lines = @(& $File @Arguments 2>&1); $code = $LASTEXITCODE
+  $ErrorActionPreference = $previous
+  $text = $lines -join "`n"
+  if ($lines.Count -gt 0) { $lines | Out-Host }
+  if ($code -notin $Allowed) { throw "$File $($Arguments -join ' ') failed with exit code $code.`n$text" }
+  return [pscustomobject]@{ Code = $code; Text = $text }
 }
 
-function Get-HclBlocks([string]$Text, [string]$HeaderPattern) {
-  $blocks = [System.Collections.Generic.List[string]]::new()
-  foreach ($match in [regex]::Matches($Text, $HeaderPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-    $open = $Text.IndexOf('{', $match.Index)
-    if ($open -lt 0) { continue }
-    $depth = 0
-    $inString = $false
-    for ($i = $open; $i -lt $Text.Length; $i++) {
-      $current = $Text[$i]
-      if ($inString) {
-        if ($current -eq '\') { $i++; continue }
-        if ($current -eq '"') { $inString = $false }
-        continue
-      }
-      if ($current -eq '"') { $inString = $true; continue }
-      if ($current -eq '{') { $depth++ }
-      elseif ($current -eq '}') {
-        $depth--
-        if ($depth -eq 0) {
-          $blocks.Add($Text.Substring($match.Index, $i - $match.Index + 1))
-          break
-        }
-      }
-    }
-  }
-  return @($blocks)
+function Tf([string]$Dir, [string[]]$Arguments, [int[]]$Allowed = @(0)) {
+  return Invoke-Native 'terraform' (@("-chdir=$Dir") + $Arguments) $Allowed
 }
 
-function Test-ExactHclAssignment([string]$Block, [string]$Name, [string]$ValuePattern) {
-  return [regex]::Matches($Block, "(?m)^\s*$([regex]::Escape($Name))\s*=\s*$ValuePattern\s*$").Count -eq 1
+function Aws([string[]]$Arguments, [int[]]$Allowed = @(0)) {
+  return Invoke-Native 'aws.exe' (@('--endpoint-url', $LocalstackEndpoint, '--region', 'us-east-1') + $Arguments) $Allowed
 }
 
-function Copy-CleanTree([string]$Source, [string]$Destination) {
+function Copy-Clean([string]$Source, [string]$Destination) {
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-  Get-ChildItem -LiteralPath $Source -Force | Where-Object {
-    $_.Name -notin @(".terraform", ".terraform.lock.hcl", "terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.d")
-  } | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
+  foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+    if ($item.Name -in @('.terraform','.terraform.lock.hcl','terraform.tfstate','terraform.tfstate.backup','.terraform.tfstate.lock.info') -or $item.Extension -in @('.tfplan','.tfstate')) { continue }
+    Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
   }
 }
 
-function Invoke-Terraform([string]$Directory, [string[]]$Arguments, [int[]]$AllowedExitCodes = @(0)) {
-  & terraform "-chdir=$Directory" @Arguments | Out-Host
-  $code = $LASTEXITCODE
-  if ($code -notin $AllowedExitCodes) {
-    throw "terraform $($Arguments -join ' ') 失败，exit code=$code"
-  }
-  return $code
+function Get-Contract([string]$Dir) {
+  $r = Tf $Dir @('output','-json','release_contract')
+  return $r.Text | ConvertFrom-Json
 }
 
-function Invoke-ExactTerraformTest([string]$Directory, [string]$TestDirectory, [int]$ExpectedPassed) {
-  $output = @(& terraform "-chdir=$Directory" test "-test-directory=$TestDirectory" -no-color 2>&1)
-  $code = $LASTEXITCODE
-  $output | Out-Host
-  if ($code -ne 0) { throw "terraform test 失败，exit code=$code" }
-  $joined = $output -join "`n"
-  $summaries = [regex]::Matches($joined, 'Success!\s+([0-9]+) passed,\s+0 failed\.')
-  $passedRuns = [regex]::Matches($joined, '(?m)^\s*run\s+"[^"]+"\.\.\.\s+pass\s*$')
-  if ($summaries.Count -ne 1 -or [int]$summaries[0].Groups[1].Value -ne $ExpectedPassed -or $passedRuns.Count -ne $ExpectedPassed) {
-    throw "terraform test 运行数不精确：期望 $ExpectedPassed。"
+function Assert-Tests([string]$Dir, [int]$Expected) {
+  $r = Tf $Dir @('test','-test-directory=tests','-no-color')
+  if ([regex]::Matches($r.Text, "(?m)^Success!\s+$Expected passed,\s+0 failed\.\s*$").Count -ne 1 -or
+      [regex]::Matches($r.Text, '(?m)^\s*run\s+"[^"]+"\.\.\.\s+pass\s*$').Count -ne $Expected) {
+    throw "Expected exactly $Expected Terraform test runs."
   }
 }
 
-function Get-WorkspaceContract([string]$Directory) {
-  $json = (& terraform "-chdir=$Directory" output -json release_contract)
-  if ($LASTEXITCODE -ne 0) { throw "读取 release_contract 失败。" }
-  return ($json | ConvertFrom-Json -Depth 20)
-}
-
-Assert-LoopbackEndpoint $LocalstackEndpoint
+Assert-Endpoint $LocalstackEndpoint
 
 $candidatePath = (Resolve-Path -LiteralPath $Candidate).Path
-$rootFiles = @(Get-ChildItem -LiteralPath $candidatePath -File -Filter "*.tf")
-if ($rootFiles.Count -eq 0) { throw "Candidate 中没有 Terraform 文件。" }
-$allText = ($rootFiles | Get-Content -Raw) -join "`n"
-$safeText = Remove-HclComments $allText
-$failures = [System.Collections.Generic.List[string]]::new()
+$files = @(Get-ChildItem -LiteralPath $candidatePath -Recurse -File)
+if ($files.Count -eq 0 -or @($files | Where-Object { $_.Extension -ne '.tf' }).Count -ne 0) { throw 'Candidate must contain Terraform HCL files only.' }
+$text = ($files | Where-Object Extension -eq '.tf' | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
+if ($text -match '\bterraform\.workspace\b') { throw 'CLI workspaces are not part of this environment-isolation contract.' }
+if ([regex]::Matches($text, 'backend\s+"s3"\s*\{\s*\}').Count -ne 1) { throw 'Exactly one empty partial S3 backend is required.' }
+if ([regex]::Matches($text, 'resource\s+"aws_s3_bucket"\s+"release"').Count -ne 1 -or
+    [regex]::Matches($text, 'resource\s+"aws_s3_object"\s+"release"').Count -ne 1) { throw 'Exact S3 bucket/object release resources are required.' }
+if ($text -notmatch 'for_each\s*=\s*local\.active_services' -or $text -notmatch 'csvdecode\s*\(' -or $text -notmatch 'duplicate_services' -or $text -notmatch 'output\s+"catalog_guard"[\s\S]*?precondition' -or
+    $text -notmatch 'contains\s*\(\s*\["dev",\s*"stage",\s*"prod"\]') { throw 'Stable catalog and explicit environment guards are incomplete.' }
+if ($text -notmatch 'access_key\s*=\s*"test"' -or $text -notmatch 'secret_key\s*=\s*"test"' -or
+    $text -notmatch 'skip_credentials_validation\s*=\s*true' -or $text -notmatch 'skip_metadata_api_check\s*=\s*true' -or
+    $text -notmatch 'skip_requesting_account_id\s*=\s*true') { throw 'Safe LocalStack provider contract is incomplete.' }
+if ($text -match '(?i)\b(mock_provider|override_data|override_resource|profile|shared_credentials_files|assume_role)\b|AKIA[0-9A-Z]{16}') { throw 'Forbidden mock or credential mechanism found.' }
+$awsTypes = @([regex]::Matches($text, 'resource\s+"(aws_[a-z0-9_]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+if (($awsTypes -join ',') -ne 'aws_s3_bucket,aws_s3_object') { throw "Unexpected AWS managed resource type: $($awsTypes -join ',')" }
+if ($text -match 'resource\s+"terraform_data"') { throw 'terraform_data is not part of this managed graph.' }
 
-$endpointVariables = @(Get-HclBlocks $safeText '(?m)^[ \t]*variable\s+"localstack_endpoint"\s*\{')
-if ($endpointVariables.Count -ne 1 -or -not (Test-ExactHclAssignment $endpointVariables[0] 'default' '"http://localhost:4566"')) {
-  $failures.Add("localstack_endpoint 必须精确声明一次，默认值必须是 http://localhost:4566。")
-}
-
-$providerBlocks = @(Get-HclBlocks $safeText '(?m)^[ \t]*provider\s+"aws"\s*\{')
-if ($providerBlocks.Count -ne 1) {
-  $failures.Add("必须且只能声明一个 aws provider block。")
-}
-else {
-  $provider = $providerBlocks[0]
-  $assignments = @{
-    region                       = 'var\.aws_region'
-    access_key                   = '"test"'
-    secret_key                   = '"test"'
-    skip_credentials_validation = 'true'
-    skip_metadata_api_check      = 'true'
-    skip_requesting_account_id   = 'true'
-    s3_use_path_style            = 'true'
-  }
-  foreach ($entry in $assignments.GetEnumerator()) {
-    if (-not (Test-ExactHclAssignment $provider $entry.Key $entry.Value)) {
-      $failures.Add("aws provider 必须精确设置 $($entry.Key)。")
-    }
-  }
-  $endpointBlocks = @(Get-HclBlocks $provider '(?m)^[ \t]*endpoints\s*\{')
-  if ($endpointBlocks.Count -ne 1) {
-    $failures.Add("aws provider 必须有且只有一个 endpoints block。")
-  }
-  else {
-    $keys = @([regex]::Matches($endpointBlocks[0], '(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*=') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
-    if (($keys -join ',') -ne 's3,sns,sts') { $failures.Add("endpoints 必须精确包含 s3、sns、sts。") }
-    foreach ($service in @('s3', 'sns', 'sts')) {
-      if (-not (Test-ExactHclAssignment $endpointBlocks[0] $service 'var\.localstack_endpoint')) {
-        $failures.Add("$service endpoint 必须指向 var.localstack_endpoint。")
-      }
-    }
-  }
-}
-
-foreach ($type in @('aws_s3_bucket', 'aws_sns_topic')) {
-  $blocks = @(Get-HclBlocks $safeText "resource\s+`"$type`"\s+`"release`"\s*\{")
-  if ($blocks.Count -ne 1 -or -not (Test-ExactHclAssignment $blocks[0] 'for_each' 'local\.active_services')) {
-    $failures.Add("$type.release 必须精确使用 local.active_services 作为 for_each。")
-  }
-}
-$bucketBlocks = @(Get-HclBlocks $safeText '(?m)^[ \t]*resource\s+"aws_s3_bucket"\s+"release"\s*\{')
-$topicBlocks = @(Get-HclBlocks $safeText '(?m)^[ \t]*resource\s+"aws_sns_topic"\s+"release"\s*\{')
-if ($bucketBlocks.Count -ne 1 -or -not (Test-ExactHclAssignment $bucketBlocks[0] 'bucket' '"\$\{var\.name_prefix\}-\$\{terraform\.workspace\}-\$\{each\.key\}-\$\{var\.run_id\}"')) {
-  $failures.Add('bucket 实际名称必须精确包含 terraform.workspace。')
-}
-if ($topicBlocks.Count -ne 1 -or -not (Test-ExactHclAssignment $topicBlocks[0] 'name' '"\$\{var\.name_prefix\}-\$\{terraform\.workspace\}-\$\{each\.key\}-\$\{var\.run_id\}-events"')) {
-  $failures.Add('topic 实际名称必须精确包含 terraform.workspace。')
-}
-if ($safeText -notmatch 'resource\s+"terraform_data"\s+"catalog_guard"' -or $safeText -notmatch 'contains\s*\(\s*\["dev",\s*"stage",\s*"prod"\]') {
-  $failures.Add("缺少 dev/stage/prod workspace guard。")
-}
-if ($safeText -notmatch '\bduplicate_services\b' -or $safeText -notmatch 'csvdecode\s*\(' -or $safeText -notmatch 'for\s+service\s*,\s*rows\s+in\s+local\.all_groups') {
-  $failures.Add("重复检测必须覆盖全部 normalized rows，而不是只覆盖 enabled rows。")
-}
-$outputBlocks = @(Get-HclBlocks $safeText '(?m)^[ \t]*output\s+"release_contract"\s*\{')
-if ($outputBlocks.Count -ne 1 -or $outputBlocks[0] -notmatch 'aws_s3_bucket\.release' -or $outputBlocks[0] -notmatch 'aws_sns_topic\.release' -or $outputBlocks[0] -notmatch 'terraform\.workspace') {
-  $failures.Add('release_contract 必须从实际 S3/SNS resources 与 terraform.workspace 派生。')
-}
-if ($safeText -match '(?i)(profile\s*=|(?m)^\s*token\s*=|shared_(config|credentials)|assume_role(_with_web_identity)?\s*\{|web_identity_token|credential_process|container_(credentials|authorization)|AKIA[0-9A-Z]{16})') {
-  $failures.Add("禁止替代凭证渠道、AssumeRole 或真实 access key。")
-}
-if ($failures.Count -gt 0) {
-  $failures | ForEach-Object { Write-Error $_ }
-  throw "Challenge 33 静态合同失败（未完成的 starter 应当失败）。"
-}
-
-$runId = ([Guid]::NewGuid().ToString('N')).Substring(0, 8)
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) "tfpro-c33-$runId"
-$workDir = Join-Path $tempRoot 'candidate'
-$fixtureSource = (Resolve-Path (Join-Path $PSScriptRoot '..\fixtures')).Path
-$testSource = (Resolve-Path (Join-Path $PSScriptRoot 'canonical.tftest.hcl')).Path
-$workspaceTestSource = (Resolve-Path (Join-Path $PSScriptRoot 'invalid-workspace.tftest.hcl')).Path
-$namePrefix = 'tfpro-c33'
-$oldAccess = $env:AWS_ACCESS_KEY_ID
-$oldSecret = $env:AWS_SECRET_ACCESS_KEY
-$oldRegion = $env:AWS_DEFAULT_REGION
-$env:AWS_ACCESS_KEY_ID = 'test'
-$env:AWS_SECRET_ACCESS_KEY = 'test'
-$env:AWS_DEFAULT_REGION = 'us-east-1'
-$commonVars = @(
-  "-var=localstack_endpoint=$LocalstackEndpoint",
-  "-var=name_prefix=$namePrefix",
-  "-var=run_id=$runId",
-  '-var=catalog_file=fixtures/services.csv'
-)
+$runId = ([Guid]::NewGuid().ToString('N')).Substring(0,10)
+$temp = Join-Path ([IO.Path]::GetTempPath()) "tfpro-c33-$runId"
+$testDir = Join-Path $temp 'test'
+$stateBucket = "tfpro-c33-state-$runId"
+$prefix = 'tfpro-c33'
+$oldAccess = $env:AWS_ACCESS_KEY_ID; $oldSecret = $env:AWS_SECRET_ACCESS_KEY; $oldRegion = $env:AWS_DEFAULT_REGION
+$env:AWS_ACCESS_KEY_ID = 'test'; $env:AWS_SECRET_ACCESS_KEY = 'test'; $env:AWS_DEFAULT_REGION = 'us-east-1'
+$roots = @{}
+$failure = $null
 
 try {
-  Copy-CleanTree $candidatePath $workDir
-  Copy-Item -LiteralPath $fixtureSource -Destination (Join-Path $workDir 'fixtures') -Recurse -Force
-  New-Item -ItemType Directory -Force -Path (Join-Path $workDir 'tests-dev') | Out-Null
-  New-Item -ItemType Directory -Force -Path (Join-Path $workDir 'tests-invalid-workspace') | Out-Null
-  Copy-Item -LiteralPath $testSource -Destination (Join-Path $workDir 'tests-dev\canonical.tftest.hcl')
-  Copy-Item -LiteralPath $workspaceTestSource -Destination (Join-Path $workDir 'tests-invalid-workspace\invalid-workspace.tftest.hcl')
+  Copy-Clean $candidatePath $testDir
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\fixtures') -Destination (Join-Path $testDir 'fixtures') -Recurse -Force
+  New-Item -ItemType Directory -Force -Path (Join-Path $testDir 'tests') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'canonical.tftest.hcl') -Destination (Join-Path $testDir 'tests\canonical.tftest.hcl')
+  Tf $testDir @('fmt','-check','-recursive') | Out-Null
+  Tf $testDir @('init','-backend=false','-input=false','-no-color') | Out-Null
+  Tf $testDir @('validate','-no-color') | Out-Null
+  Assert-Tests $testDir 8
+  if ($UnitOnly) { Write-Host 'PASS: Challenge 33 exact Terraform 1.6 canonical tests.'; return }
 
-  Invoke-Terraform $workDir @('init', '-backend=false', '-input=false', '-no-color')
-  Invoke-Terraform $workDir @('workspace', 'new', 'dev')
-  Invoke-ExactTerraformTest $workDir 'tests-dev' 7
-  Invoke-Terraform $workDir @('workspace', 'select', 'default')
-  Invoke-ExactTerraformTest $workDir 'tests-invalid-workspace' 1
-  Invoke-Terraform $workDir @('workspace', 'select', 'dev')
+  try { Invoke-WebRequest -UseBasicParsing -Uri "$($LocalstackEndpoint.TrimEnd('/'))/_localstack/health" -TimeoutSec 5 | Out-Null } catch { throw 'LocalStack is unavailable.' }
+  Aws @('s3api','create-bucket','--bucket',$stateBucket) | Out-Null
 
-  if ($SkipE2E) {
-    Write-Host 'Challenge 33 mock/contract tests passed.'
-    return
+  foreach ($environment in @('dev','stage','prod')) {
+    $dir = Join-Path $temp $environment; $roots[$environment] = $dir
+    Copy-Clean $candidatePath $dir
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\fixtures') -Destination (Join-Path $dir 'fixtures') -Recurse -Force
+    $backend = @('init','-input=false','-no-color',"-backend-config=bucket=$stateBucket","-backend-config=key=environments/$environment.tfstate",'-backend-config=region=us-east-1',"-backend-config=endpoint=$LocalstackEndpoint",'-backend-config=access_key=test','-backend-config=secret_key=test','-backend-config=force_path_style=true','-backend-config=skip_credentials_validation=true','-backend-config=skip_metadata_api_check=true','-backend-config=skip_requesting_account_id=true')
+    Tf $dir $backend | Out-Null
   }
 
-  try { Invoke-WebRequest -UseBasicParsing -Uri "$($LocalstackEndpoint.TrimEnd('/'))/_localstack/health" -TimeoutSec 5 | Out-Null }
-  catch { throw "LocalStack 不可用：$LocalstackEndpoint" }
-
-  $devPlan = Join-Path $workDir 'dev-promotion.tfplan'
-  Invoke-Terraform $workDir (@('plan', "-out=$devPlan", '-input=false', '-no-color') + $commonVars)
-
-  Invoke-Terraform $workDir @('workspace', 'new', 'stage')
-  $crossOutput = @(& terraform "-chdir=$workDir" apply -input=false -no-color $devPlan 2>&1)
-  $crossCode = $LASTEXITCODE
-  $crossOutput | Out-Host
-  if ($crossCode -eq 0) { throw "dev saved plan 被错误地应用到了 stage workspace。" }
-  $stageStateAfterRejectedPlan = @(& terraform "-chdir=$workDir" state list 2>$null)
-  if ($LASTEXITCODE -eq 0 -and $stageStateAfterRejectedPlan.Count -ne 0) {
-    throw "被拒绝的跨 workspace saved plan 仍写入了 stage state。"
-  }
-  $stageProbeBucket = "$namePrefix-stage-api-$runId"
-  & aws --endpoint-url $LocalstackEndpoint --region us-east-1 s3api head-bucket --bucket $stageProbeBucket 2>$null
-  if ($LASTEXITCODE -eq 0) { throw "跨 workspace saved plan 创建了 stage 资源。" }
-
-  Invoke-Terraform $workDir @('workspace', 'select', 'dev')
-  Invoke-Terraform $workDir @('apply', '-input=false', '-no-color', $devPlan)
-  $devContract = Get-WorkspaceContract $workDir
-  if ($devContract.workspace -ne 'dev') { throw "dev 输出合同 workspace 错误。" }
-
-  Invoke-Terraform $workDir @('workspace', 'select', 'stage')
-  Invoke-Terraform $workDir (@('apply', '-auto-approve', '-input=false', '-no-color') + $commonVars)
-  $stageContract = Get-WorkspaceContract $workDir
-  if ($stageContract.workspace -ne 'stage') { throw "stage 输出合同 workspace 错误。" }
-
-  Invoke-Terraform $workDir @('workspace', 'new', 'prod')
-  Invoke-Terraform $workDir (@('apply', '-auto-approve', '-input=false', '-no-color') + $commonVars)
-  $prodContract = Get-WorkspaceContract $workDir
-  if ($prodContract.workspace -ne 'prod') { throw "prod 输出合同 workspace 错误。" }
-
-  foreach ($workspace in @('dev', 'stage', 'prod')) {
-    Invoke-Terraform $workDir @('workspace', 'select', $workspace)
-    $stateAddresses = @(& terraform "-chdir=$workDir" state list)
-    if ($LASTEXITCODE -ne 0 -or $stateAddresses.Count -ne 5) { throw "$workspace state 应精确包含 5 个实例。" }
-    $contract = Get-WorkspaceContract $workDir
-    foreach ($service in @('api', 'worker')) {
-      $bucket = "$namePrefix-$workspace-$service-$runId"
-      & aws --endpoint-url $LocalstackEndpoint --region us-east-1 s3api head-bucket --bucket $bucket 2>$null
-      if ($LASTEXITCODE -ne 0) { throw "$workspace bucket 不存在：$bucket" }
-      $bucketWorkspaceTag = (& aws --endpoint-url $LocalstackEndpoint --region us-east-1 s3api get-bucket-tagging --bucket $bucket --query "TagSet[?Key=='Workspace'].Value | [0]" --output text)
-      if ($LASTEXITCODE -ne 0 -or $bucketWorkspaceTag -ne $workspace) { throw "$bucket 的真实 Workspace tag 错误。" }
-      $topicArn = $contract.topics.PSObject.Properties[$service].Value
-      $expectedTopicName = "$namePrefix-$workspace-$service-$runId-events"
-      if ($contract.topic_names.PSObject.Properties[$service].Value -ne $expectedTopicName) { throw "$workspace topic 名称合同错误。" }
-      $topicWorkspaceTag = (& aws --endpoint-url $LocalstackEndpoint --region us-east-1 sns list-tags-for-resource --resource-arn $topicArn --query "Tags[?Key=='Workspace'].Value | [0]" --output text)
-      if ($LASTEXITCODE -ne 0 -or $topicWorkspaceTag -ne $workspace) { throw "$expectedTopicName 的真实 Workspace tag 错误。" }
-    }
-  }
-
-  $devBucket = "$namePrefix-dev-api-$runId"
-  & aws --endpoint-url $LocalstackEndpoint --region us-east-1 s3api put-bucket-tagging --bucket $devBucket --tagging 'TagSet=[{Key=Workspace,Value=tampered},{Key=Challenge,Value=33}]' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "无法注入 dev drift。" }
-
-  Invoke-Terraform $workDir @('workspace', 'select', 'stage')
-  $stageClean = Invoke-Terraform $workDir (@('plan', '-detailed-exitcode', '-input=false', '-no-color') + $commonVars) @(0, 2)
-  if ($stageClean -ne 0) { throw "dev drift 污染了 stage state。" }
-
-  Invoke-Terraform $workDir @('workspace', 'select', 'dev')
-  $devDrift = Invoke-Terraform $workDir (@('plan', '-detailed-exitcode', '-input=false', '-no-color') + $commonVars) @(0, 2)
-  if ($devDrift -ne 2) { throw "dev workspace 未检测到注入的 tag drift。" }
-  Invoke-Terraform $workDir (@('apply', '-auto-approve', '-input=false', '-no-color') + $commonVars)
-
-  $reorderedVars = @(
-    "-var=localstack_endpoint=$LocalstackEndpoint",
-    "-var=name_prefix=$namePrefix",
-    "-var=run_id=$runId",
-    '-var=catalog_file=fixtures/services-reordered.csv'
-  )
-  $reorderedCode = Invoke-Terraform $workDir (@('plan', '-detailed-exitcode', '-input=false', '-no-color') + $reorderedVars) @(0, 2)
-  if ($reorderedCode -ne 0) { throw "CSV 重排行产生了资源变更。" }
-
-  foreach ($workspace in @('prod', 'stage', 'dev')) {
-    Invoke-Terraform $workDir @('workspace', 'select', $workspace)
-    Invoke-Terraform $workDir (@('destroy', '-auto-approve', '-input=false', '-no-color') + $commonVars)
-  }
-  Invoke-Terraform $workDir @('workspace', 'select', 'default')
-  foreach ($workspace in @('dev', 'stage', 'prod')) {
-    Invoke-Terraform $workDir @('workspace', 'delete', $workspace)
-  }
-
-  $buckets = @(& aws --endpoint-url $LocalstackEndpoint --region us-east-1 s3api list-buckets --query 'Buckets[].Name' --output text)
-  if (($buckets -join ' ') -match [regex]::Escape("$namePrefix-")) { throw "destroy 后仍有 Challenge 33 bucket。" }
-  $topics = @(& aws --endpoint-url $LocalstackEndpoint --region us-east-1 sns list-topics --query 'Topics[].TopicArn' --output text)
-  if (($topics -join ' ') -match [regex]::Escape("$namePrefix-")) { throw "destroy 后仍有 Challenge 33 topic。" }
-
-  Write-Host 'Challenge 33 passed: 8 tests + independent field failures + real resource names/tags + workspace isolation + saved-plan rejection + drift isolation + reorder + exact cleanup.'
-}
-finally {
-  if (Test-Path $workDir) {
-    $workspaceOutput = @(& terraform "-chdir=$workDir" workspace list 2>$null)
-    foreach ($workspace in @('prod', 'stage', 'dev')) {
-      if (($workspaceOutput -join "`n") -match "(?m)^\s*\*?\s*$workspace\s*$") {
-        & terraform "-chdir=$workDir" workspace select $workspace 2>$null | Out-Null
-        & terraform "-chdir=$workDir" destroy -auto-approve -input=false -no-color @commonVars 2>$null | Out-Null
+  $plans = @{}
+  $planHashes = @{}
+  foreach ($environment in @('dev','stage','prod')) {
+    $dir = $roots[$environment]; $plan = Join-Path $dir "$environment.tfplan"; $plans[$environment] = $plan
+    Tf $dir @('plan','-input=false','-no-color',"-out=$plan","-var=environment=$environment","-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services.csv') | Out-Null
+    $planHashes[$environment] = (Get-FileHash -LiteralPath $plan -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($planHashes[$environment] -notmatch '^[0-9a-f]{64}$') { throw "$environment saved plan SHA256 audit failed." }
+    $planJson = (Tf $dir @('show','-json',$plan)).Text | ConvertFrom-Json
+    $actions = @($planJson.resource_changes | Where-Object { (@($_.change.actions) -join ',') -ne 'no-op' })
+    if ($actions.Count -ne 4 -or @($actions | Where-Object { (@($_.change.actions) -join ',') -ne 'create' }).Count -ne 0) { throw "$environment saved plan must contain exactly four creates and no destructive action." }
+    foreach ($service in @('api','worker')) {
+      $bucketAddress = "aws_s3_bucket.release[`"$service`"]"
+      $objectAddress = "aws_s3_object.release[`"$service`"]"
+      $bucketChange = @($actions | Where-Object address -eq $bucketAddress)
+      $objectChange = @($actions | Where-Object address -eq $objectAddress)
+      if ($bucketChange.Count -ne 1 -or $objectChange.Count -ne 1) { throw "$environment saved plan address contract is incomplete for $service." }
+      $expectedBucket = "$prefix-$environment-$service-$runId"
+      $bucketAfter = $bucketChange[0].change.after
+      $objectAfter = $objectChange[0].change.after
+      if ($bucketAfter.bucket -ne $expectedBucket -or $bucketAfter.tags.Environment -ne $environment -or
+          $bucketAfter.tags.Service -ne $service -or $bucketAfter.tags.ManagedBy -ne 'terraform') {
+        throw "$environment saved plan bucket contract mismatch for $service."
+      }
+      if ($objectAfter.key -ne "releases/$environment.json" -or $objectAfter.tags.Environment -ne $environment -or
+          $objectAfter.tags.Service -ne $service -or $objectAfter.tags.ManagedBy -ne 'terraform' -or
+          $objectAfter.metadata.environment -ne $environment -or $objectAfter.metadata.service -ne $service) {
+        throw "$environment saved plan object contract mismatch for $service."
       }
     }
-    & terraform "-chdir=$workDir" workspace select default 2>$null | Out-Null
-    foreach ($workspace in @('dev', 'stage', 'prod')) {
-      & terraform "-chdir=$workDir" workspace delete -force $workspace 2>$null | Out-Null
+  }
+  if (@($planHashes.Values | Sort-Object -Unique).Count -ne 3) { throw 'Saved plan audit hashes must be unique per explicit environment contract.' }
+  foreach ($environment in @('dev','stage','prod')) {
+    Tf $roots[$environment] @('apply','-input=false','-no-color',$plans[$environment]) | Out-Null
+  }
+
+  $stateListing = (Aws @('s3api','list-objects-v2','--bucket',$stateBucket,'--prefix','environments/','--output','json')).Text | ConvertFrom-Json
+  $stateKeys = @($stateListing.Contents | ForEach-Object Key | Sort-Object)
+  $expectedStateKeys = @('environments/dev.tfstate','environments/prod.tfstate','environments/stage.tfstate')
+  if (($stateKeys -join "`n") -ne ($expectedStateKeys -join "`n")) { throw "Unexpected S3 backend state keys: $($stateKeys -join ', ')" }
+
+  foreach ($environment in @('dev','stage','prod')) {
+    $dir = $roots[$environment]; $contract = Get-Contract $dir
+    if ($contract.environment -ne $environment) { throw "$environment output contract mismatch." }
+    $stateAddresses = @((Tf $dir @('state','list')).Text -split "`r?`n" | Where-Object { $_ -ne '' } | Sort-Object)
+    $expectedAddresses = @('aws_s3_bucket.release["api"]','aws_s3_bucket.release["worker"]','aws_s3_object.release["api"]','aws_s3_object.release["worker"]')
+    if (($stateAddresses -join "`n") -ne ($expectedAddresses -join "`n")) { throw "$environment state address contract mismatch." }
+    foreach ($service in @('api','worker')) {
+      $bucket = "$prefix-$environment-$service-$runId"; $key = "releases/$environment.json"
+      if ($contract.buckets.$service -ne $bucket -or $contract.objects.$service -ne $key -or
+          $contract.environment_tags.buckets.$service -ne $environment -or $contract.environment_tags.objects.$service -ne $environment) {
+        throw "$environment output resource contract mismatch for $service."
+      }
+      Aws @('s3api','head-bucket','--bucket',$bucket) | Out-Null
+      $head = Aws @('s3api','head-object','--bucket',$bucket,'--key',$key,'--output','json')
+      $metadata = ($head.Text | ConvertFrom-Json).Metadata
+      if ($metadata.environment -ne $environment -or $metadata.service -ne $service) { throw "$bucket/$key metadata mismatch." }
+      $tagSet = ((Aws @('s3api','get-object-tagging','--bucket',$bucket,'--key',$key,'--output','json')).Text | ConvertFrom-Json).TagSet
+      $tags = @{}; foreach ($tag in $tagSet) { $tags[$tag.Key] = $tag.Value }
+      if ($tags.Environment -ne $environment -or $tags.Service -ne $service -or $tags.ManagedBy -ne 'terraform') { throw "$bucket/$key tags mismatch." }
+      $body = Join-Path $temp "$environment-$service.json"; Aws @('s3api','get-object','--bucket',$bucket,'--key',$key,$body) | Out-Null
+      $payload = Get-Content -Raw -LiteralPath $body | ConvertFrom-Json
+      if ($payload.environment -ne $environment -or $payload.service -ne $service) { throw "$bucket/$key payload mismatch." }
     }
   }
-  $env:AWS_ACCESS_KEY_ID = $oldAccess
-  $env:AWS_SECRET_ACCESS_KEY = $oldSecret
-  $env:AWS_DEFAULT_REGION = $oldRegion
-  if (Test-Path $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
+
+  $driftFile = Join-Path $temp 'drift.json'; [IO.File]::WriteAllText($driftFile,'{"drift":true}',[Text.UTF8Encoding]::new($false))
+  Aws @('s3api','put-object','--bucket',"$prefix-dev-api-$runId",'--key','releases/dev.json','--body',$driftFile) | Out-Null
+  $commonDev = @('-input=false','-no-color','-var=environment=dev',"-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services.csv')
+  $devDrift = Tf $roots['dev'] (@('plan','-detailed-exitcode') + $commonDev) @(0,2)
+  if ($devDrift.Code -ne 2) { throw 'Dev object drift was not detected.' }
+  $stageClean = Tf $roots['stage'] @('plan','-detailed-exitcode','-input=false','-no-color','-var=environment=stage',"-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services.csv') @(0,2)
+  if ($stageClean.Code -ne 0) { throw 'Dev drift leaked into stage state.' }
+  $prodClean = Tf $roots['prod'] @('plan','-detailed-exitcode','-input=false','-no-color','-var=environment=prod',"-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services.csv') @(0,2)
+  if ($prodClean.Code -ne 0) { throw 'Dev drift leaked into prod state.' }
+  Tf $roots['dev'] (@('apply','-auto-approve') + $commonDev) | Out-Null
+  $reorder = Tf $roots['dev'] @('plan','-detailed-exitcode','-input=false','-no-color','-var=environment=dev',"-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services-reordered.csv') @(0,2)
+  if ($reorder.Code -ne 0) { throw 'Catalog reorder changed the graph.' }
+
+  foreach ($environment in @('prod','stage','dev')) {
+    Tf $roots[$environment] @('destroy','-auto-approve','-input=false','-no-color',"-var=environment=$environment","-var=name_prefix=$prefix","-var=run_id=$runId",'-var=catalog_file=fixtures/services.csv') | Out-Null
+  }
+  Aws @('s3','rb',"s3://$stateBucket",'--force') | Out-Null
+  $remaining = Aws @('s3api','list-buckets','--query','Buckets[].Name','--output','text')
+  if ($remaining.Text -match "$prefix-(dev|stage|prod)-") { throw 'Challenge 33 S3 residue remains.' }
+  Write-Host 'PASS: Challenge 33 TF1.6 tests + audited environment-bound saved plans + exact S3 state keys + real S3 drift/reorder + zero residue.'
 }
+catch { $failure = $_ }
+finally {
+  $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  foreach ($environment in @('prod','stage','dev')) {
+    if ($roots.ContainsKey($environment) -and (Test-Path $roots[$environment])) {
+      & terraform "-chdir=$($roots[$environment])" destroy -auto-approve -input=false -no-color "-var=environment=$environment" "-var=name_prefix=$prefix" "-var=run_id=$runId" '-var=catalog_file=fixtures/services.csv' 2>$null | Out-Null
+    }
+  }
+  & aws.exe --endpoint-url $LocalstackEndpoint --region us-east-1 s3 rb "s3://$stateBucket" --force 2>$null | Out-Null
+  $env:AWS_ACCESS_KEY_ID = $oldAccess; $env:AWS_SECRET_ACCESS_KEY = $oldSecret; $env:AWS_DEFAULT_REGION = $oldRegion
+  if (Test-Path $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+  $ErrorActionPreference = $previous
+}
+if ($failure) { throw $failure }

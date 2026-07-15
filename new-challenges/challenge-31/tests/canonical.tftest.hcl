@@ -1,163 +1,76 @@
-mock_provider "aws" {
-  mock_data "aws_ami" {
-    defaults = {
-      id           = "ami-0123456789abcdef0"
-      architecture = "x86_64"
-      state        = "available"
-    }
-  }
-
-  mock_data "aws_vpc" {
-    defaults = {
-      cidr_block = "10.61.0.0/16"
-    }
-  }
-
-  mock_data "aws_subnet" {
-    defaults = {
-      cidr_block = "10.61.99.0/24"
-    }
-  }
-}
-
-run "canonical_fleet_contract" {
+run "canonical_ec2_graph" {
   command = plan
-
   variables {
-    name_prefix    = "tfpro-c31-mock"
-    fleet_csv_path = "../fixtures/fleets.csv"
+    name_prefix = "tfpro-c31-plan"
+    run_id      = "plan"
   }
-
   assert {
-    condition     = output.active_fleet_ids == tolist(["api", "worker"])
-    error_message = "仅 enabled prod fleets 可以进入 graph。"
+    condition     = toset(output.active_fleet_ids) == toset(["api", "worker"])
+    error_message = "Target fleet IDs are not deterministic."
   }
-
   assert {
-    condition     = output.fleet_contract.capacities.api.desired_capacity == 2 && output.fleet_contract.capacities.worker.max_size == 4
-    error_message = "容量必须经过数字标准化。"
+    condition     = length(output.resource_addresses.security_groups) == 2 && length(output.resource_addresses.launch_templates) == 2 && length(output.resource_addresses.instances) == 2
+    error_message = "Each fleet must own one SG, launch template, and instance."
   }
-
   assert {
-    condition     = output.resource_addresses.instances == tolist(["aws_instance.fleet[\"api/01\"]", "aws_instance.fleet[\"api/02\"]", "aws_instance.fleet[\"worker/01\"]"])
-    error_message = "实例地址必须使用稳定的 fleet_id/ordinal。"
+    condition     = output.fleet_contract.fleets.api.instance_type == "t3.micro" && output.fleet_contract.fleets.worker.instance_type == "t3.small"
+    error_message = "Fleet contract lost normalized instance types."
   }
 }
 
 run "reordered_csv_is_stable" {
   command = plan
-
-  variables {
-    name_prefix    = "tfpro-c31-mock"
-    fleet_csv_path = "../fixtures/fleets-reordered.csv"
-  }
-
+  variables { fleet_csv_path = "../fixtures/fleets-reordered.csv" }
   assert {
-    condition     = output.active_fleet_ids == tolist(["api", "worker"])
-    error_message = "CSV 重排不能改变 fleet IDs。"
-  }
-
-  assert {
-    condition     = output.resource_addresses.launch_templates == tolist(["aws_launch_template.fleet[\"api\"]", "aws_launch_template.fleet[\"worker\"]"])
-    error_message = "CSV 重排不能改变 launch template 地址。"
+    condition     = toset(output.active_fleet_ids) == toset(["api", "worker"])
+    error_message = "CSV reorder changed fleet identity."
   }
 }
 
-run "invalid_environment" {
+run "invalid_environment_is_rejected" {
   command = plan
-
-  variables {
-    environment = "qa"
-  }
-
+  variables { environment = "qa" }
   expect_failures = [var.environment]
 }
 
-run "duplicate_active_fleet_id" {
+run "duplicate_fleet_id_is_rejected" {
   command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/fleets-duplicate.csv"
-  }
-
-  expect_failures = [check.fleet_ids_unique]
+  variables { fleet_csv_path = "../fixtures/fleets-duplicate.csv" }
+  expect_failures = [check.fleet_ids_unique, output.catalog_guard]
 }
 
-run "invalid_capacity_bounds" {
+run "unknown_subnet_is_rejected" {
   command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/fleets-invalid-capacity.csv"
-  }
-
-  expect_failures = [check.fleet_capacity_bounds]
+  variables { fleet_csv_path = "../fixtures/fleets-invalid-subnet.csv" }
+  expect_failures = [check.fleet_subnets_exist, output.catalog_guard]
 }
 
-run "unknown_subnet" {
+run "missing_csv_is_rejected" {
   command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/fleets-invalid-subnet.csv"
-  }
-
-  expect_failures = [check.fleet_subnets_exist]
-}
-
-run "missing_csv_file" {
-  command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/does-not-exist.csv"
-  }
-
+  variables { fleet_csv_path = "../fixtures/does-not-exist.csv" }
   expect_failures = [var.fleet_csv_path]
 }
 
-run "non_loopback_candidate_endpoint" {
+run "non_loopback_endpoint_is_rejected" {
   command = plan
-
-  variables {
-    localstack_endpoint = "https://aws.amazon.com"
-  }
-
+  variables { localstack_endpoint = "https://aws.amazon.com" }
   expect_failures = [var.localstack_endpoint]
 }
 
-run "invalid_enabled_boolean" {
+run "invalid_enabled_is_rejected" {
   command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/fleets-invalid-boolean.csv"
-  }
-
-  expect_failures = [check.fleet_fields_valid]
+  variables { fleet_csv_path = "../fixtures/fleets-invalid-boolean.csv" }
+  expect_failures = [check.fleet_enabled_values_valid, check.catalog_not_empty, output.catalog_guard]
 }
 
-run "empty_required_fleet_fields" {
+run "empty_required_fields_are_rejected" {
   command = plan
-
-  variables {
-    fleet_csv_path = "../fixtures/fleets-bad-fields.csv"
-  }
-
-  expect_failures = [check.fleet_fields_valid]
+  variables { fleet_csv_path = "../fixtures/fleets-bad-fields.csv" }
+  expect_failures = [check.fleet_fields_valid, check.fleet_instance_types_valid, output.catalog_guard]
 }
 
-run "invalid_network_contract" {
+run "invalid_instance_type_is_rejected" {
   command = plan
-
-  variables {
-    network = {
-      cidr_block = "not-a-cidr"
-      subnets = {
-        broken-a = {
-          cidr_block        = "10.61.10.0/24"
-          availability_zone = "us-east-1a"
-          owner             = "edge"
-        }
-      }
-    }
-  }
-
-  expect_failures = [var.network]
+  variables { fleet_csv_path = "../fixtures/fleets-invalid-instance-type.csv" }
+  expect_failures = [check.fleet_instance_types_valid, output.catalog_guard]
 }

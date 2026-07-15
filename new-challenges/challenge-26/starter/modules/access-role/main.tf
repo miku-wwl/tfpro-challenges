@@ -1,3 +1,3 @@
-# TODO: 用 aws_iam_policy_document 构造 assume role 与权限策略。
-# TODO: 创建 role、customer-managed policy 和 attachment。
-
+# TODO: use aws_iam_policy_document for trust and permission documents.
+# TODO: create one role, customer-managed policy, and attachment.
+# TODO: add blocking least-privilege preconditions without permissions boundaries.

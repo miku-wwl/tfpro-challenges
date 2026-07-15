@@ -1,5 +1,15 @@
-variable "run_id" { type = string }
-variable "role" { type = string }
+variable "run_id" {
+  type = string
+}
+
+variable "role" {
+  type = string
+}
+
+variable "region" {
+  type = string
+}
+
 variable "services" {
   type = map(object({
     name           = string
@@ -9,5 +19,7 @@ variable "services" {
     enabled        = bool
   }))
 }
-variable "peer_topics" { type = map(string) }
 
+variable "peer_buckets" {
+  type = map(string)
+}

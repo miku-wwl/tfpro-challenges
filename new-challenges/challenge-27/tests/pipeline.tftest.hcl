@@ -1,83 +1,135 @@
-mock_provider "aws" {
-  mock_data "aws_iam_policy_document" {
-    defaults = {
-      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-
-  mock_resource "aws_s3_bucket" {
-    defaults = {
-      bucket = "tfpro-c27-dev-releases"
-      arn    = "arn:aws:s3:::tfpro-c27-dev-releases"
-    }
-  }
-
-  mock_resource "aws_s3_object" {
-    defaults = {
-      etag = "mock-etag"
-    }
-  }
-
-  mock_resource "aws_sns_topic" {
-    defaults = {
-      arn = "arn:aws:sns:us-east-1:000000000000:tfpro-c27-dev-releases"
-    }
-  }
-}
-
-run "publishes_auditable_graph" {
-  command = plan
-
-  assert {
-    condition     = length(output.managed_addresses) == 5
-    error_message = "发布图必须包含 bucket、object、notification、topic、topic policy。"
-  }
-
-  assert {
-    condition     = output.object_key == "releases/1.0.0/manifest.json"
-    error_message = "object key 必须编码 release version。"
-  }
-}
-
-run "identity_contains_manifest_digest" {
-  command = plan
-
-  assert {
-    condition     = startswith(output.release_identity, "1.0.0:") && length(output.release_identity) == 70
-    error_message = "release identity 必须包含版本和 SHA-256。"
-  }
-}
-
-run "new_release_has_new_stable_key" {
+run "canonical_release_graph" {
   command = plan
 
   variables {
-    release_version = "1.1.0-rc.1+build.7"
-    manifest_path   = "../fixtures/release-prerelease.json"
+    name_prefix = "tfpro-c27-test"
   }
 
   assert {
-    condition     = output.object_key == "releases/1.1.0-rc.1+build.7/manifest.json"
-    error_message = "新版本必须映射到确定性的 release key。"
+    condition     = output.artifact_names == tolist(["api-config", "release-notes", "worker-config"])
+    error_message = "只有三个 enabled artifacts 可以进入 resource graph。"
+  }
+
+  assert {
+    condition = tolist(output.managed_addresses) == tolist([
+      "aws_s3_bucket.release",
+      "aws_s3_object.artifact[\"api-config\"]",
+      "aws_s3_object.artifact[\"release-notes\"]",
+      "aws_s3_object.artifact[\"worker-config\"]"
+    ])
+    error_message = "managed addresses 必须以 artifact name 为稳定身份。"
+  }
+
+  assert {
+    condition = tomap(output.object_keys) == tomap({
+      api-config    = "releases/2026.07.1/config/api.json"
+      release-notes = "releases/2026.07.1/docs/release.txt"
+      worker-config = "releases/2026.07.1/config/worker.json"
+    })
+    error_message = "object key 必须由 release 与 manifest object_key 确定。"
+  }
+
+  assert {
+    condition     = output.release_contract.application == "orders-api" && output.release_contract.environment == "dev" && output.release_contract.release == "2026.07.1"
+    error_message = "release contract header 不正确。"
+  }
+
+  assert {
+    condition     = length(output.release_contract.manifest_sha256) == 64 && !strcontains(jsonencode(output.release_contract), "feature")
+    error_message = "release contract 必须包含规范摘要且不得泄露制品正文。"
   }
 }
 
-run "rejects_invalid_semver" {
+run "reordered_manifest_is_identical" {
   command = plan
 
   variables {
-    release_version = "01.0.0"
+    name_prefix   = "tfpro-c27-test"
+    manifest_path = "../fixtures/release-v1-reordered.json"
   }
 
-  expect_failures = [var.release_version]
+  assert {
+    condition     = output.artifact_names == run.canonical_release_graph.artifact_names
+    error_message = "数组重排不得改变 active artifact identities。"
+  }
+
+  assert {
+    condition     = output.object_keys == run.canonical_release_graph.object_keys
+    error_message = "数组重排不得改变 object keys。"
+  }
+
+  assert {
+    condition     = output.release_contract.manifest_sha256 == run.canonical_release_graph.release_contract.manifest_sha256
+    error_message = "规范 manifest SHA-256 必须忽略数组顺序。"
+  }
 }
 
-run "rejects_manifest_contract_mismatch" {
+run "rejects_header_mismatch" {
   command = plan
 
   variables {
     manifest_path = "../fixtures/release-invalid.json"
   }
 
-  expect_failures = [check.manifest_contract, aws_s3_object.manifest]
+  expect_failures = [check.manifest_header]
+}
+
+run "rejects_empty_manifest" {
+  command = plan
+
+  variables {
+    manifest_path = "../fixtures/release-empty.json"
+  }
+
+  expect_failures = [check.manifest_not_empty]
+}
+
+run "rejects_duplicate_artifact_name" {
+  command = plan
+
+  variables {
+    manifest_path = "../fixtures/release-duplicate-name.json"
+  }
+
+  expect_failures = [check.artifact_names_unique]
+}
+
+run "rejects_duplicate_enabled_object_key" {
+  command = plan
+
+  variables {
+    manifest_path = "../fixtures/release-duplicate-key.json"
+  }
+
+  expect_failures = [check.object_keys_unique]
+}
+
+run "rejects_invalid_artifact_fields" {
+  command = plan
+
+  variables {
+    manifest_path = "../fixtures/release-invalid-artifact.json"
+  }
+
+  expect_failures = [check.artifact_fields_valid]
+}
+
+run "rejects_manifest_without_enabled_artifact" {
+  command = plan
+
+  variables {
+    manifest_path = "../fixtures/release-no-enabled.json"
+  }
+
+  expect_failures = [check.enabled_artifacts_present]
+}
+
+run "rejects_non_loopback_endpoint" {
+  command = plan
+
+  variables {
+    localstack_endpoint = "https://s3.amazonaws.com"
+  }
+
+  expect_failures = [var.localstack_endpoint]
 }

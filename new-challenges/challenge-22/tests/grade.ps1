@@ -1,473 +1,404 @@
-[CmdletBinding()]
 param(
-  [string]$Candidate = (Join-Path $PSScriptRoot "..\starter"),
-  [string]$LocalstackEndpoint = "http://localhost:4566",
-  [switch]$SkipE2E
+    [string]$Candidate = (Join-Path $PSScriptRoot "../starter"),
+    [string]$LocalstackEndpoint = "http://localhost:4566",
+    [switch]$UnitOnly
 )
 
-$ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
-
 function Assert-LoopbackEndpoint([string]$Endpoint) {
-  $uri = [Uri]$Endpoint
-  if ($uri.Scheme -notin @("http", "https") -or $uri.Host -notin @("localhost", "127.0.0.1", "::1")) {
-    throw "拒绝非 loopback endpoint: $Endpoint"
-  }
-}
-
-function Remove-HclComments([string]$Text) {
-  $builder = [Text.StringBuilder]::new($Text.Length)
-  $state = "code"
-  for ($i = 0; $i -lt $Text.Length; $i++) {
-    $current = $Text[$i]
-    $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
-    if ($state -eq "code") {
-      if ($current -eq '"') { [void]$builder.Append($current); $state = "string" }
-      elseif ($current -eq '#') { [void]$builder.Append(' '); $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '*') { [void]$builder.Append("  "); $i++; $state = "block" }
-      else { [void]$builder.Append($current) }
+    $uri = $null
+    if ([string]::IsNullOrEmpty($Endpoint) -or $Endpoint.IndexOf([char]13) -ge 0 -or $Endpoint.IndexOf([char]10) -ge 0) {
+        throw "LocalstackEndpoint must not contain CR or LF."
     }
-    elseif ($state -eq "string") {
-      [void]$builder.Append($current)
-      if ($current -eq '\' -and $i + 1 -lt $Text.Length) { $i++; [void]$builder.Append($Text[$i]) }
-      elseif ($current -eq '"') { $state = "code" }
+    $match = [regex]::Match($Endpoint, '\Ahttps?://(?:localhost|127\.0\.0\.1|\[::1\]):(?<port>[1-9][0-9]{0,4})\z', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success -or [int]$match.Groups['port'].Value -gt 65535 -or
+        -not [Uri]::TryCreate($Endpoint, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.DnsSafeHost -notin @('localhost', '127.0.0.1', '::1') -or $uri.PathAndQuery -ne '/' -or
+        -not [string]::IsNullOrEmpty($uri.UserInfo) -or $uri.Port -ne [int]$match.Groups['port'].Value) {
+        throw "LocalstackEndpoint must be an HTTP(S) loopback root origin with an explicit port from 1 to 65535."
     }
-    elseif ($state -eq "line") {
-      if ($current -eq "`n") { [void]$builder.Append($current); $state = "code" }
-      else { [void]$builder.Append(' ') }
-    }
-    else {
-      if ($current -eq '*' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "code" }
-      elseif ($current -eq "`n") { [void]$builder.Append($current) }
-      else { [void]$builder.Append(' ') }
-    }
-  }
-  return $builder.ToString()
 }
-
-function Get-HclBlocks([string]$Text, [string]$HeaderPattern) {
-  $blocks = [System.Collections.Generic.List[string]]::new()
-  foreach ($match in [regex]::Matches($Text, $HeaderPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-    $open = $Text.IndexOf('{', $match.Index)
-    if ($open -lt 0) { continue }
-    $depth = 0
-    $inString = $false
-    for ($i = $open; $i -lt $Text.Length; $i++) {
-      $current = $Text[$i]
-      if ($inString) {
-        if ($current -eq '\') { $i++; continue }
-        if ($current -eq '"') { $inString = $false }
-        continue
-      }
-      if ($current -eq '"') { $inString = $true; continue }
-      if ($current -eq '{') { $depth++ }
-      elseif ($current -eq '}') {
-        $depth--
-        if ($depth -eq 0) {
-          $blocks.Add($Text.Substring($match.Index, $i - $match.Index + 1))
-          break
-        }
-      }
-    }
-  }
-  return @($blocks)
-}
-
-function Test-ExactHclAssignment([string]$Block, [string]$Name, [string]$ValuePattern) {
-  return [regex]::Matches($Block, "(?m)^\s*$([regex]::Escape($Name))\s*=\s*$ValuePattern\s*$").Count -eq 1
-}
-
-function Invoke-Terraform([string]$Directory, [string[]]$Arguments, [int[]]$AllowedExitCodes = @(0)) {
-  & terraform "-chdir=$Directory" @Arguments | Out-Host
-  $code = $LASTEXITCODE
-  if ($code -notin $AllowedExitCodes) { throw "terraform $($Arguments -join ' ') 失败，exit code=$code" }
-  return $code
-}
-
-function Invoke-TerraformTest([string]$Directory, [string]$TestDirectory, [int]$ExpectedPassed) {
-  $testOutput = @(& terraform "-chdir=$Directory" test "-test-directory=$TestDirectory" -no-color 2>&1)
-  $code = $LASTEXITCODE
-  $testOutput | Out-Host
-  if ($code -ne 0) { throw "terraform test 失败，exit code=$code" }
-
-  $joined = $testOutput -join "`n"
-  $summaries = [regex]::Matches($joined, 'Success!\s+([0-9]+) passed,\s+0 failed\.')
-  $passedRuns = [regex]::Matches($joined, '(?m)^\s*run\s+"[^"]+"\.\.\.\s+pass\s*$')
-  if ($summaries.Count -ne 1 -or [int]$summaries[0].Groups[1].Value -ne $ExpectedPassed -or $passedRuns.Count -ne $ExpectedPassed) {
-    throw "terraform test 运行数不精确：期望 $ExpectedPassed，输出摘要或 pass run 数不匹配。"
-  }
-}
-
-function Copy-Tree([string]$Source, [string]$Destination) {
-  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-  Get-ChildItem -LiteralPath $Source -Force | Where-Object { $_.Name -notin @(".terraform", "terraform.tfstate", "terraform.tfstate.backup", ".runtime") } | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
-  }
-}
-
-function Write-BackendConfig([string]$Path, [string]$Bucket, [string]$Key, [string]$Table, [string]$Endpoint) {
-  $safeEndpoint = $Endpoint.TrimEnd("/")
-  $content = @"
-bucket                      = "$Bucket"
-key                         = "$Key"
-region                      = "us-east-1"
-dynamodb_table              = "$Table"
-encrypt                     = false
-access_key                  = "test"
-secret_key                  = "test"
-skip_credentials_validation = true
-skip_metadata_api_check     = true
-skip_requesting_account_id  = true
-use_path_style              = true
-endpoints = {
-  s3       = "$safeEndpoint"
-  dynamodb = "$safeEndpoint"
-}
-"@
-  [IO.File]::WriteAllText($Path, $content, [Text.UTF8Encoding]::new($false))
-}
-
-function Get-RequiredProperty($Object, [string]$Name, [string]$Context) {
-  if ($null -eq $Object) { throw "$Context 不存在。" }
-  $property = $Object.PSObject.Properties[$Name]
-  if ($null -eq $property) { throw "$Context 缺少 $Name。" }
-  return $property.Value
-}
-
-function Assert-BackendMetadata(
-  [string]$Directory,
-  [string]$ExpectedBucket,
-  [string]$ExpectedKey,
-  [string]$ExpectedTable,
-  [string]$ExpectedEndpoint
-) {
-  $metadataPath = Join-Path $Directory ".terraform\terraform.tfstate"
-  if (-not (Test-Path -LiteralPath $metadataPath)) { throw "$Directory 缺少 backend metadata。" }
-  $metadata = Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json -Depth 100
-  $backend = Get-RequiredProperty $metadata "backend" "$Directory metadata"
-  if ((Get-RequiredProperty $backend "type" "$Directory backend") -ne "s3") { throw "$Directory backend type 不是 s3。" }
-  $config = Get-RequiredProperty $backend "config" "$Directory backend"
-
-  $expectedValues = @{
-    bucket         = $ExpectedBucket
-    key            = $ExpectedKey
-    dynamodb_table = $ExpectedTable
-    access_key     = "test"
-    secret_key     = "test"
-  }
-  foreach ($entry in $expectedValues.GetEnumerator()) {
-    if ((Get-RequiredProperty $config $entry.Key "$Directory backend config") -ne $entry.Value) {
-      throw "$Directory backend metadata 的 $($entry.Key) 不匹配。"
-    }
-  }
-  foreach ($flag in @("skip_credentials_validation", "skip_metadata_api_check", "skip_requesting_account_id", "use_path_style")) {
-    if ((Get-RequiredProperty $config $flag "$Directory backend config") -ne $true) {
-      throw "$Directory backend metadata 缺少 $flag=true。"
-    }
-  }
-  $endpoints = Get-RequiredProperty $config "endpoints" "$Directory backend config"
-  $endpointKeys = @($endpoints.PSObject.Properties.Name | Where-Object { $null -ne $endpoints.PSObject.Properties[$_].Value } | Sort-Object)
-  if (($endpointKeys -join ",") -ne "dynamodb,s3") { throw "$Directory backend endpoints 必须精确包含 dynamodb、s3。" }
-  foreach ($service in @("dynamodb", "s3")) {
-    $value = [string](Get-RequiredProperty $endpoints $service "$Directory backend endpoints")
-    Assert-LoopbackEndpoint $value
-    if ($value.TrimEnd('/') -ne $ExpectedEndpoint.TrimEnd('/')) { throw "$Directory 的 $service backend endpoint 不匹配。" }
-  }
-}
-
-function New-TerraformAuditShim([string]$ShimDirectory) {
-  New-Item -ItemType Directory -Force -Path $ShimDirectory | Out-Null
-  if ($IsWindows) {
-    $shimPath = Join-Path $ShimDirectory "terraform.cmd"
-    $content = "@echo off`r`n>>`"%TFPRO_AUDIT_LOG%`" echo %*`r`n`"%TFPRO_REAL_TERRAFORM%`" %*`r`nexit /b %ERRORLEVEL%`r`n"
-    [IO.File]::WriteAllText($shimPath, $content, [Text.ASCIIEncoding]::new())
-  }
-  else {
-    $shimPath = Join-Path $ShimDirectory "terraform"
-    $content = @'
-#!/bin/sh
-printf '%s\n' "$*" >> "$TFPRO_AUDIT_LOG"
-exec "$TFPRO_REAL_TERRAFORM" "$@"
-'@
-    [IO.File]::WriteAllText($shimPath, $content, [Text.UTF8Encoding]::new($false))
-    & chmod +x $shimPath
-    if ($LASTEXITCODE -ne 0) { throw "无法创建 terraform audit shim。" }
-  }
-}
-
-function Invoke-ReleaseAudited(
-  [string]$ScriptPath,
-  [string[]]$ReleaseArguments,
-  [string]$ShimDirectory,
-  [string]$LogPath,
-  [string]$RealTerraform
-) {
-  [IO.File]::WriteAllText($LogPath, "", [Text.UTF8Encoding]::new($false))
-  $oldPath = $env:PATH
-  $oldAuditLog = $env:TFPRO_AUDIT_LOG
-  $oldRealTerraform = $env:TFPRO_REAL_TERRAFORM
-  $code = -1
-  try {
-    $env:PATH = "$ShimDirectory$([IO.Path]::PathSeparator)$oldPath"
-    $env:TFPRO_AUDIT_LOG = $LogPath
-    $env:TFPRO_REAL_TERRAFORM = $RealTerraform
-    & pwsh -NoProfile -File $ScriptPath @ReleaseArguments | Out-Host
-    $code = $LASTEXITCODE
-  }
-  finally {
-    $env:PATH = $oldPath
-    $env:TFPRO_AUDIT_LOG = $oldAuditLog
-    $env:TFPRO_REAL_TERRAFORM = $oldRealTerraform
-  }
-  if ($code -ne 0) { throw "release.ps1 执行失败，exit code=$code。" }
-  return @(Get-Content -LiteralPath $LogPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-}
-
-function Assert-SavedPlanAudit([string[]]$CommandLines, [string[]]$ExpectedPlans) {
-  $applyLines = @($CommandLines | Where-Object { $_ -match '(?i)(^|\s)apply(\s|$)' })
-  if ($applyLines.Count -ne $ExpectedPlans.Count) {
-    throw "实际 terraform apply 次数不匹配：期望 $($ExpectedPlans.Count)，实际 $($applyLines.Count)。"
-  }
-  foreach ($line in $applyLines) {
-    if ($line -notmatch '(?i)\.tfplan(\s|$|\")' -or $line -match '(?i)-auto-approve') {
-      throw "检测到未消费 saved .tfplan 的实际 apply：$line"
-    }
-  }
-  foreach ($planName in $ExpectedPlans) {
-    $escaped = [regex]::Escape($planName)
-    $planLines = @($CommandLines | Where-Object { $_ -match '(?i)(^|\s)plan(\s|$)' -and $_ -match "(?i)-out=[^\s]*$escaped" })
-    $matchingApply = @($applyLines | Where-Object { $_ -match "(?i)$escaped" })
-    if ($planLines.Count -ne 1 -or $matchingApply.Count -ne 1) {
-      throw "$planName 必须由一次 plan -out 生成，并被一次实际 apply 消费。"
-    }
-  }
-}
-
 Assert-LoopbackEndpoint $LocalstackEndpoint
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version 2
+
+function Invoke-Native([string]$File, [string[]]$Arguments, [int[]]$Allowed = @(0)) {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $text = @(& $File @Arguments 2>&1 | ForEach-Object { "$_" })
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($code -notin $Allowed) {
+        throw "$File $($Arguments -join ' ') failed with exit $code.`n$($text -join [Environment]::NewLine)"
+    }
+    return [pscustomobject]@{ ExitCode = $code; Text = ($text -join [Environment]::NewLine) }
+}
+
+function Invoke-Aws([string[]]$Arguments, [int[]]$Allowed = @(0)) {
+    return Invoke-Native 'aws' (@('--endpoint-url', $LocalstackEndpoint) + $Arguments) $Allowed
+}
+
+function Copy-CleanTree([string]$Source, [string]$Destination) {
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($item.Name -in @('.terraform', '.terraform.lock.hcl', 'terraform.tfstate', 'terraform.tfstate.backup', '.terraform.tfstate.lock.info') -or
+            $item.Extension -in @('.tfplan', '.tfstate')) {
+            continue
+        }
+        $target = Join-Path $Destination $item.Name
+        if ($item.PSIsContainer) {
+            Copy-CleanTree $item.FullName $target
+        }
+        else {
+            Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        }
+    }
+}
+
+function Write-Utf8([string]$Path, [string]$Content) {
+    [IO.File]::WriteAllText($Path, $Content, [Text.UTF8Encoding]::new($false))
+}
+
+function Write-BackendConfig([string]$Path, [string]$Bucket, [string]$Key, [string]$Table) {
+    Write-Utf8 $Path @"
+bucket = "$Bucket"
+key = "$Key"
+region = "us-east-1"
+dynamodb_table = "$Table"
+access_key = "test"
+secret_key = "test"
+use_path_style = true
+skip_credentials_validation = true
+skip_metadata_api_check = true
+skip_requesting_account_id = true
+endpoints = { s3 = "$LocalstackEndpoint", dynamodb = "$LocalstackEndpoint" }
+"@
+}
+
+function Get-StateAddresses([string]$Root) {
+    $result = Invoke-Native 'terraform' @("-chdir=$Root", 'state', 'list')
+    return @(($result.Text -split "`r?`n") | Where-Object { $_ } | Sort-Object)
+}
+
+function Assert-PlanActions([string]$Root, [string]$Plan, [int]$Count, [string]$Action, [string]$Label) {
+    $planJson = ((Invoke-Native 'terraform' @("-chdir=$Root", 'show', '-json', $Plan)).Text | ConvertFrom-Json)
+    $changes = @($planJson.resource_changes | Where-Object { (@($_.change.actions) -join ',') -ne 'no-op' })
+    $wrong = @($changes | Where-Object { (@($_.change.actions) -join ',') -cne $Action })
+    if ($changes.Count -ne $Count -or $wrong.Count -ne 0) {
+        $summary = @($changes | ForEach-Object { "$($_.address):$(@($_.change.actions) -join ',')" }) -join '; '
+        throw "$Label expected $Count '$Action' changes, found: $summary"
+    }
+}
+
+function Remove-VersionedBucket([string]$Bucket) {
+    if ([string]::IsNullOrWhiteSpace($Bucket) -or $Bucket -notmatch '^tfpro-c22-state-[a-z0-9]{10}$') {
+        throw "Refusing to remove unexpected backend bucket '$Bucket'."
+    }
+    $listed = Invoke-Aws @('s3api', 'list-object-versions', '--bucket', $Bucket, '--output', 'json') @(0, 255)
+    if ($listed.ExitCode -eq 0 -and $listed.Text) {
+        $document = $listed.Text | ConvertFrom-Json
+        $entries = @()
+        if ($document.PSObject.Properties['Versions']) { $entries += @($document.Versions) }
+        if ($document.PSObject.Properties['DeleteMarkers']) { $entries += @($document.DeleteMarkers) }
+        foreach ($entry in $entries) {
+            if ($null -ne $entry -and $entry.Key -and $entry.VersionId) {
+                Invoke-Aws @('s3api', 'delete-object', '--bucket', $Bucket, '--key', [string]$entry.Key, '--version-id', [string]$entry.VersionId) @(0, 255) | Out-Null
+            }
+        }
+    }
+    Invoke-Aws @('s3api', 'delete-bucket', '--bucket', $Bucket) @(0, 255) | Out-Null
+}
+
+function Assert-ResourceSet([string]$Text, [string[]]$Expected, [string]$Label) {
+    $actual = @([regex]::Matches($Text, '(?m)^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{') | ForEach-Object { "$($_.Groups[1].Value).$($_.Groups[2].Value)" } | Sort-Object)
+    $wanted = @($Expected | Sort-Object)
+    if (($actual -join '|') -cne ($wanted -join '|')) {
+        throw "$Label resource set is not exact. Expected $($wanted -join ', '); found $($actual -join ', ')."
+    }
+}
+
 $candidatePath = (Resolve-Path -LiteralPath $Candidate).Path
-$requiredDirs = @("bootstrap", "producer", "consumer", "scripts")
-foreach ($dir in $requiredDirs) {
-  if (-not (Test-Path (Join-Path $candidatePath $dir))) { throw "候选目录缺少 $dir/。" }
+$challengeRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$fixtureRoot = Join-Path $challengeRoot 'fixtures'
+$producerSource = Join-Path $candidatePath 'producer'
+$consumerSource = Join-Path $candidatePath 'consumer'
+if (-not (Test-Path -LiteralPath $producerSource -PathType Container) -or -not (Test-Path -LiteralPath $consumerSource -PathType Container)) {
+    throw 'Candidate must contain producer and consumer root modules.'
 }
 
-$bootstrapText = (Get-ChildItem (Join-Path $candidatePath "bootstrap") -Filter "*.tf" | Get-Content -Raw) -join "`n"
-$producerText = (Get-ChildItem (Join-Path $candidatePath "producer") -Filter "*.tf" | Get-Content -Raw) -join "`n"
-$consumerText = (Get-ChildItem (Join-Path $candidatePath "consumer") -Filter "*.tf" | Get-Content -Raw) -join "`n"
-$scriptText = Get-Content -Raw (Join-Path $candidatePath "scripts\release.ps1")
-$allText = "$bootstrapText`n$producerText`n$consumerText`n$scriptText"
-$safeBootstrapText = Remove-HclComments $bootstrapText
-$safeConsumerText = Remove-HclComments $consumerText
-$failures = [System.Collections.Generic.List[string]]::new()
-
-$bootstrapProviderBlocks = @(Get-HclBlocks $safeBootstrapText 'provider\s+"aws"\s*\{')
-if ($bootstrapProviderBlocks.Count -ne 1) {
-  $failures.Add("bootstrap 必须且只能声明一个默认 aws provider block。")
-}
-else {
-  $providerBlock = $bootstrapProviderBlocks[0]
-  $providerAssignments = @{
-    region                      = 'var\.aws_region'
-    access_key                  = '"test"'
-    secret_key                  = '"test"'
-    skip_credentials_validation = 'true'
-    skip_metadata_api_check     = 'true'
-    skip_requesting_account_id  = 'true'
-    s3_use_path_style           = 'true'
-  }
-  foreach ($entry in $providerAssignments.GetEnumerator()) {
-    if (-not (Test-ExactHclAssignment $providerBlock $entry.Key $entry.Value)) {
-      $failures.Add("bootstrap aws provider 必须使用字面量安全配置 $($entry.Key)；动态或其他凭证不允许。")
+$expectedFiles = @('backend.tf', 'main.tf', 'outputs.tf', 'providers.tf', 'variables.tf', 'versions.tf')
+foreach ($root in @($producerSource, $consumerSource)) {
+    $files = @(Get-ChildItem -LiteralPath $root -File | Select-Object -ExpandProperty Name | Sort-Object)
+    if (($files -join '|') -cne (($expectedFiles | Sort-Object) -join '|')) {
+        throw "$root must contain exactly the six supplied Terraform files."
     }
-  }
-  $endpointBlocks = @(Get-HclBlocks $providerBlock 'endpoints\s*\{')
-  if ($endpointBlocks.Count -ne 1) {
-    $failures.Add("bootstrap aws provider 必须有且只有一个 endpoints block。")
-  }
-  else {
-    $endpointBlock = $endpointBlocks[0]
-    $endpointKeys = @([regex]::Matches($endpointBlock, '(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*=') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
-    if (($endpointKeys -join ",") -ne "dynamodb,s3,sts") { $failures.Add("bootstrap endpoints 必须精确包含 dynamodb、s3、sts。") }
-    foreach ($service in @("dynamodb", "s3", "sts")) {
-      if (-not (Test-ExactHclAssignment $endpointBlock $service 'var\.localstack_endpoint')) {
-        $failures.Add("bootstrap $service endpoint 必须指向 var.localstack_endpoint。")
-      }
+}
+
+$sourceFiles = @(Get-ChildItem -LiteralPath $candidatePath -Recurse -File -Filter '*.tf')
+foreach ($file in $sourceFiles) {
+    $raw = [IO.File]::ReadAllText($file.FullName)
+    if ($raw -match '(?i)\bTODO\b|not implemented|incomplete') {
+        throw "Unfinished marker found in $($file.FullName)."
     }
-  }
 }
 
-$remoteStateBlocks = @(Get-HclBlocks $safeConsumerText 'data\s+"terraform_remote_state"\s+"producer"\s*\{')
-if ($remoteStateBlocks.Count -ne 1) {
-  $failures.Add("consumer 必须且只能声明一个 producer terraform_remote_state block。")
+$producerText = (@(Get-ChildItem -LiteralPath $producerSource -File -Filter '*.tf' | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n")
+$consumerText = (@(Get-ChildItem -LiteralPath $consumerSource -File -Filter '*.tf' | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n")
+$allTf = $producerText + "`n" + $consumerText
+if (([regex]::Matches($allTf, 'required_version\s*=\s*"~> 1\.6"')).Count -ne 2 -or
+    ([regex]::Matches($allTf, 'version\s*=\s*"~> 5\.100"')).Count -ne 2) {
+    throw 'Both roots require the exact Terraform and AWS provider constraints.'
 }
-else {
-  $remoteStateBlock = $remoteStateBlocks[0]
-  $remoteAssignments = @{
-    backend                      = '"s3"'
-    access_key                   = '"test"'
-    secret_key                   = '"test"'
-    skip_credentials_validation  = 'true'
-    skip_metadata_api_check      = 'true'
-    skip_requesting_account_id   = 'true'
-    use_path_style               = 'true'
-  }
-  foreach ($entry in $remoteAssignments.GetEnumerator()) {
-    if (-not (Test-ExactHclAssignment $remoteStateBlock $entry.Key $entry.Value)) {
-      $failures.Add("terraform_remote_state 必须使用字面量安全配置 $($entry.Key)；动态或其他凭证不允许。")
+
+foreach ($backend in @((Join-Path $producerSource 'backend.tf'), (Join-Path $consumerSource 'backend.tf'))) {
+    $text = [IO.File]::ReadAllText($backend)
+    if ($text -notmatch 'backend\s+"s3"\s*\{\s*\}' -or $text -match '(?i)bucket\s*=|key\s*=|region\s*=|endpoint|access_key|secret_key|dynamodb_table') {
+        throw "$backend must contain an empty partial S3 backend without committed settings."
     }
-  }
-  $remoteEndpointBlocks = @(Get-HclBlocks $remoteStateBlock 'endpoints\s*=\s*\{')
-  if ($remoteEndpointBlocks.Count -ne 1) {
-    $failures.Add("terraform_remote_state 必须有且只有一个 endpoints map。")
-  }
-  else {
-    $remoteEndpointBlock = $remoteEndpointBlocks[0]
-    $remoteEndpointKeys = @([regex]::Matches($remoteEndpointBlock, '(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*=') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne "endpoints" } | Sort-Object)
-    if (($remoteEndpointKeys -join ",") -ne "s3") { $failures.Add("terraform_remote_state endpoints 必须精确只包含 s3。") }
-    if (-not (Test-ExactHclAssignment $remoteEndpointBlock "s3" 'var\.localstack_endpoint')) {
-      $failures.Add("terraform_remote_state S3 endpoint 必须指向 var.localstack_endpoint。")
+}
+
+if ($allTf -match '(?i)ignore_changes|state\s+push|force-unlock|-lock=false|aws_dynamodb|aws_s3_bucket\s+"backend"') {
+    throw 'Forbidden drift suppression, state mutation, lock bypass, or backend ownership was found.'
+}
+Assert-ResourceSet $producerText @('terraform_data.catalog_guard', 'aws_s3_bucket.artifacts', 'aws_s3_bucket_versioning.artifacts', 'aws_s3_object.release') 'producer'
+Assert-ResourceSet $consumerText @('terraform_data.contract_guard', 'aws_s3_bucket.receipts', 'aws_s3_bucket_versioning.receipts', 'aws_s3_object.receipt') 'consumer'
+if (([regex]::Matches($consumerText, 'data\s+"terraform_remote_state"\s+"producer"\s*\{')).Count -ne 1 -or
+    $consumerText -notmatch 'backend\s*=\s*"s3"') {
+    throw 'consumer must declare exactly one S3 terraform_remote_state producer data source.'
+}
+foreach ($required in @('access_key', 'secret_key', 'use_path_style', 'skip_credentials_validation', 'skip_metadata_api_check', 'skip_requesting_account_id', 'endpoints')) {
+    if ($consumerText -notmatch "(?m)^\s*$required\s*=") {
+        throw "consumer remote-state contract is missing $required."
     }
-  }
+}
+if ($allTf -match '(?m)^\s*(ec2|iam|sns|dynamodb)\s*=\s*var\.localstack_endpoint') {
+    throw 'Only S3 and STS provider endpoints are allowed.'
 }
 
-if ($bootstrapText -notmatch 'hash_key\s*=\s*"LockID"') { $failures.Add("DynamoDB hash_key 必须为 LockID。") }
-if ($bootstrapText -notmatch 'force_destroy\s*=\s*true') { $failures.Add("state bucket 必须支持最终精确清理。") }
-if ($producerText -notmatch 'backend\s+"s3"\s*\{') { $failures.Add("producer 最终 backend 必须是部分配置 S3。") }
-if ($consumerText -notmatch 'backend\s+"s3"\s*\{') { $failures.Add("consumer 自身 backend 必须是 S3。") }
-if ($consumerText -notmatch 'data\s+"terraform_remote_state"\s+"producer"') { $failures.Add("consumer 缺少 producer terraform_remote_state。") }
-if ($consumerText -notmatch 'use_path_style\s*=\s*true' -or $consumerText -notmatch 'endpoints\s*=\s*\{') { $failures.Add("remote_state 缺少 LocalStack path-style/endpoints。") }
-if ($scriptText -notmatch 'plan.+-out=' -or $scriptText -notmatch 'apply') { $failures.Add("release.ps1 必须保存并应用 plan。") }
-if ($scriptText -notmatch 'ORDER:\s*consumer-before-producer') { $failures.Add("release.ps1 缺少 consumer-first destroy 顺序。") }
-if ($allText -match '(?i)(AKIA[0-9A-Z]{16}|profile\s*=|shared_credentials)') { $failures.Add("检测到真实凭证/profile 风险。") }
-
-if ($failures.Count -gt 0) {
-  $failures | ForEach-Object { Write-Error $_ }
-  throw "远端状态契约失败（starter 在完成前应当失败）。"
+$testText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'producer.tftest.hcl'))
+if ($testText -match '(?i)mock_provider|override_(resource|data|module)' -or
+    ([regex]::Matches($testText, '(?m)^run\s+"')).Count -ne 9) {
+    throw 'Canonical suite must contain exactly 9 Terraform 1.6-compatible runs and no mock or override blocks.'
 }
 
-$runId = ([Guid]::NewGuid().ToString("N")).Substring(0, 10)
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) "tfpro-c22-$runId"
-$mockBootstrap = Join-Path $tempRoot "mock-bootstrap"
-$mockProducer = Join-Path $tempRoot "mock-producer"
-$runtimeRoot = Join-Path $tempRoot "runtime"
-$bootstrap = Join-Path $runtimeRoot "bootstrap"
-$producer = Join-Path $runtimeRoot "producer"
-$consumer = Join-Path $runtimeRoot "consumer"
-$bucket = "tfpro-c22-$runId-state"
-$table = "tfpro-c22-$runId-locks"
-$prefix = "runs/$runId"
-$producerKey = "$prefix/producer.tfstate"
-$consumerKey = "$prefix/consumer.tfstate"
-$backendDir = Join-Path $runtimeRoot ".backend"
-$producerBackend = Join-Path $backendDir "producer.hcl"
-$consumerBackend = Join-Path $backendDir "consumer.hcl"
-$auditShim = Join-Path $tempRoot "terraform-audit-shim"
-$auditLog = Join-Path $tempRoot "terraform-commands.log"
-$realTerraform = (Get-Command terraform -CommandType Application | Select-Object -First 1).Source
-$localBackendFixture = (Resolve-Path (Join-Path $PSScriptRoot "..\fixtures\local-backend.tf")).Path
-$releaseScript = Join-Path $runtimeRoot "scripts\release.ps1"
-$oldAccess = $env:AWS_ACCESS_KEY_ID
-$oldSecret = $env:AWS_SECRET_ACCESS_KEY
-$oldRegion = $env:AWS_DEFAULT_REGION
-$env:AWS_ACCESS_KEY_ID = "test"
-$env:AWS_SECRET_ACCESS_KEY = "test"
-$env:AWS_DEFAULT_REGION = "us-east-1"
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("tfpro-c22-grade-" + [Guid]::NewGuid().ToString('N'))
+$unitProducer = Join-Path $tempRoot 'unit-producer'
+$unitConsumer = Join-Path $tempRoot 'unit-consumer'
+$producerWork = Join-Path $tempRoot 'producer'
+$consumerWork = Join-Path $tempRoot 'consumer'
+$pluginCache = Join-Path $tempRoot 'plugin-cache'
+$envBefore = @{}
+foreach ($name in @('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION', 'AWS_EC2_METADATA_DISABLED', 'TF_PLUGIN_CACHE_DIR')) {
+    $envBefore[$name] = [Environment]::GetEnvironmentVariable($name)
+}
+
+$runId = $null
+$suffix = $null
+$stateBucket = $null
+$lockTable = $null
+$artifactBucket = $null
+$receiptBucket = $null
+$producerInitialized = $false
+$consumerInitialized = $false
+$currentRelease = 'v1'
 
 try {
-  Copy-Tree (Join-Path $candidatePath "bootstrap") $mockBootstrap
-  New-Item -ItemType Directory -Force -Path (Join-Path $mockBootstrap "tests") | Out-Null
-  Copy-Item (Join-Path $PSScriptRoot "bootstrap.tftest.hcl") (Join-Path $mockBootstrap "tests\bootstrap.tftest.hcl")
-  Invoke-Terraform $mockBootstrap @("init", "-backend=false", "-input=false", "-no-color")
-  Invoke-TerraformTest $mockBootstrap "tests" 1
+    New-Item -ItemType Directory -Path $pluginCache -Force | Out-Null
+    $env:TF_PLUGIN_CACHE_DIR = $pluginCache
+    Copy-CleanTree $producerSource $unitProducer
+    Copy-CleanTree $consumerSource $unitConsumer
+    New-Item -ItemType Directory -Path (Join-Path $unitProducer 'tests') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'producer.tftest.hcl') -Destination (Join-Path $unitProducer 'tests/producer.tftest.hcl')
 
-  Copy-Tree (Join-Path $candidatePath "producer") $mockProducer
-  New-Item -ItemType Directory -Force -Path (Join-Path $mockProducer "tests") | Out-Null
-  Copy-Item (Join-Path $PSScriptRoot "producer.tftest.hcl") (Join-Path $mockProducer "tests\producer.tftest.hcl")
-  Invoke-Terraform $mockProducer @("init", "-backend=false", "-input=false", "-no-color")
-  Invoke-TerraformTest $mockProducer "tests" 1
+    Invoke-Native 'terraform' @('fmt', '-check', '-recursive', $unitProducer) | Out-Null
+    Invoke-Native 'terraform' @('fmt', '-check', '-recursive', $unitConsumer) | Out-Null
+    Invoke-Native 'terraform' @("-chdir=$unitProducer", 'init', '-backend=false', '-input=false') | Out-Null
+    Invoke-Native 'terraform' @("-chdir=$unitConsumer", 'init', '-backend=false', '-input=false') | Out-Null
+    Invoke-Native 'terraform' @("-chdir=$unitProducer", 'validate', '-no-color') | Out-Null
+    Invoke-Native 'terraform' @("-chdir=$unitConsumer", 'validate', '-no-color') | Out-Null
+    $test = Invoke-Native 'terraform' @("-chdir=$unitProducer", 'test', '-test-directory=tests', '-no-color')
+    if ($test.Text -notmatch 'Success! 9 passed, 0 failed') {
+        throw "Canonical run count/result mismatch.`n$($test.Text)"
+    }
+    Write-Host '[unit] both roots passed fmt/init/validate; 9 Terraform 1.6 canonical runs passed.'
+    if ($UnitOnly) {
+        Write-Host 'PASS challenge-22 UnitOnly'
+        return
+    }
 
-  if ($SkipE2E) {
-    Write-Host "Challenge 22 canonical tests passed."
-    return
-  }
+    $health = Invoke-RestMethod -UseBasicParsing -Uri ($LocalstackEndpoint + '/_localstack/health') -Method Get
+    foreach ($service in @('s3', 'dynamodb', 'sts')) {
+        if ($null -eq $health.services.$service -or [string]$health.services.$service -notmatch 'available|running') {
+            throw "LocalStack service $service is not available."
+        }
+    }
 
-  try { Invoke-WebRequest -UseBasicParsing -Uri "$($LocalstackEndpoint.TrimEnd('/'))/_localstack/health" -TimeoutSec 5 | Out-Null }
-  catch { throw "LocalStack 不可用：$LocalstackEndpoint" }
+    $env:AWS_ACCESS_KEY_ID = 'test'
+    $env:AWS_SECRET_ACCESS_KEY = 'test'
+    $env:AWS_DEFAULT_REGION = 'us-east-1'
+    $env:AWS_EC2_METADATA_DISABLED = 'true'
 
-  Copy-Tree (Join-Path $candidatePath "bootstrap") $bootstrap
-  Copy-Tree (Join-Path $candidatePath "producer") $producer
-  Copy-Tree (Join-Path $candidatePath "consumer") $consumer
-  Copy-Tree (Join-Path $candidatePath "scripts") (Join-Path $runtimeRoot "scripts")
-  New-Item -ItemType Directory -Force -Path $backendDir | Out-Null
-  New-TerraformAuditShim $auditShim
-  Write-BackendConfig $producerBackend $bucket $producerKey $table $LocalstackEndpoint
-  Write-BackendConfig $consumerBackend $bucket $consumerKey $table $LocalstackEndpoint
+    $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 10)
+    $runId = "c22-$suffix"
+    $stateBucket = "tfpro-c22-state-$suffix"
+    $lockTable = "tfpro-c22-lock-$suffix"
+    $artifactBucket = "tfpro-c22-artifacts-$runId"
+    $receiptBucket = "tfpro-c22-receipts-$runId"
+    $producerStateKey = 'producer/terraform.tfstate'
+    $consumerStateKey = 'consumer/terraform.tfstate'
 
-  $bootstrapVars = @("-var=localstack_endpoint=$LocalstackEndpoint", "-var=state_bucket_name=$bucket", "-var=lock_table_name=$table")
-  Invoke-Terraform $bootstrap @("init", "-input=false", "-no-color")
-  Invoke-Terraform $bootstrap (@("apply", "-auto-approve", "-input=false", "-no-color") + $bootstrapVars)
+    Invoke-Aws @('s3api', 'create-bucket', '--bucket', $stateBucket, '--region', 'us-east-1') | Out-Null
+    Invoke-Aws @('s3api', 'put-bucket-versioning', '--bucket', $stateBucket, '--versioning-configuration', 'Status=Enabled') | Out-Null
+    Invoke-Aws @('dynamodb', 'create-table', '--table-name', $lockTable, '--attribute-definitions', 'AttributeName=LockID,AttributeType=S', '--key-schema', 'AttributeName=LockID,KeyType=HASH', '--billing-mode', 'PAY_PER_REQUEST', '--region', 'us-east-1') | Out-Null
+    Invoke-Aws @('dynamodb', 'wait', 'table-exists', '--table-name', $lockTable, '--region', 'us-east-1') | Out-Null
 
-  Remove-Item -LiteralPath (Join-Path $producer "backend.tf") -Force
-  Copy-Item -LiteralPath $localBackendFixture -Destination (Join-Path $producer "local-backend.tf")
-  Invoke-Terraform $producer @("init", "-input=false", "-no-color")
-  Invoke-Terraform $producer @("apply", "-auto-approve", "-input=false", "-no-color", "-var=release_id=legacy")
-  $legacyAddresses = @(& terraform "-chdir=$producer" state list)
-  if ($legacyAddresses -notcontains "terraform_data.contract") { throw "legacy local state 未建立预期地址。" }
+    Copy-CleanTree $producerSource $producerWork
+    Copy-CleanTree $consumerSource $consumerWork
+    $producerBackendPending = Join-Path $producerWork 'backend.tf.pending'
+    Move-Item -LiteralPath (Join-Path $producerWork 'backend.tf') -Destination $producerBackendPending
+    Invoke-Native 'terraform' @("-chdir=$producerWork", 'init', '-input=false') | Out-Null
+    $producerInitialized = $true
 
-  Remove-Item -LiteralPath (Join-Path $producer "local-backend.tf") -Force
-  Copy-Item -LiteralPath (Join-Path $candidatePath "producer\backend.tf") -Destination (Join-Path $producer "backend.tf")
-  Invoke-Terraform $producer @("init", "-migrate-state", "-force-copy", "-input=false", "-no-color", "-backend-config=$producerBackend")
-  Assert-BackendMetadata $producer $bucket $producerKey $table $LocalstackEndpoint
-  $migratedAddresses = @(& terraform "-chdir=$producer" state list)
-  if ($migratedAddresses -notcontains "terraform_data.contract") { throw "迁移后资源身份丢失。" }
-  & aws --endpoint-url $LocalstackEndpoint s3api head-object --bucket $bucket --key $producerKey | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "producer state object 未写入 S3。" }
+    $v1 = Join-Path $fixtureRoot 'release-v1.tfvars.json'
+    $v2 = Join-Path $fixtureRoot 'release-v2.tfvars.json'
+    $producerBase = @('-input=false', "-var=run_id=$runId", "-var=localstack_endpoint=$LocalstackEndpoint")
+    $producerV1Plan = Join-Path $tempRoot 'producer-v1.tfplan'
+    Invoke-Native 'terraform' (@("-chdir=$producerWork", 'plan', "-out=$producerV1Plan") + $producerBase + @("-var-file=$v1")) | Out-Null
+    Assert-PlanActions $producerWork $producerV1Plan 5 'create' 'producer v1 saved plan'
+    Invoke-Native 'terraform' @("-chdir=$producerWork", 'apply', '-input=false', '-auto-approve', $producerV1Plan) | Out-Null
 
-  $deployArguments = @("-Action", "Deploy", "-Root", $runtimeRoot, "-StateBucket", $bucket, "-LockTable", $table, "-StatePrefix", $prefix, "-LocalstackEndpoint", $LocalstackEndpoint, "-ReleaseId", "release-$runId")
-  $deployAudit = @(Invoke-ReleaseAudited -ScriptPath $releaseScript -ReleaseArguments $deployArguments -ShimDirectory $auditShim -LogPath $auditLog -RealTerraform $realTerraform)
-  Assert-SavedPlanAudit -CommandLines $deployAudit -ExpectedPlans @("producer-apply.tfplan", "consumer-apply.tfplan")
-  Assert-BackendMetadata $producer $bucket $producerKey $table $LocalstackEndpoint
-  Assert-BackendMetadata $consumer $bucket $consumerKey $table $LocalstackEndpoint
-  $observed = (& terraform "-chdir=$consumer" output -json observed_contract) | ConvertFrom-Json -Depth 20
-  if ($observed.schema_version -ne 2 -or $observed.release_id -ne "release-$runId") { throw "consumer 未观察到 producer schema v2 新发布。" }
+    $beforeMigration = Get-StateAddresses $producerWork
+    if ($beforeMigration.Count -ne 5) {
+        throw "Producer local state expected 5 instances, found $($beforeMigration.Count)."
+    }
+    Move-Item -LiteralPath $producerBackendPending -Destination (Join-Path $producerWork 'backend.tf')
+    $producerBackendConfig = Join-Path $tempRoot 'producer.backend.hcl'
+    Write-BackendConfig $producerBackendConfig $stateBucket $producerStateKey $lockTable
+    Invoke-Native 'terraform' @("-chdir=$producerWork", 'init', '-migrate-state', '-force-copy', '-input=false', "-backend-config=$producerBackendConfig") | Out-Null
 
-  $producerClean = Invoke-Terraform $producer @("plan", "-detailed-exitcode", "-input=false", "-no-color", "-var=release_id=release-$runId") @(0, 2)
-  if ($producerClean -ne 0) { throw "producer 不是 clean plan。" }
-  $consumerVars = @("-var=state_bucket=$bucket", "-var=producer_state_key=$producerKey", "-var=aws_region=us-east-1", "-var=localstack_endpoint=$LocalstackEndpoint")
-  $consumerClean = Invoke-Terraform $consumer (@("plan", "-detailed-exitcode", "-input=false", "-no-color") + $consumerVars) @(0, 2)
-  if ($consumerClean -ne 0) { throw "consumer 不是 clean plan。" }
-  & aws --endpoint-url $LocalstackEndpoint s3api head-object --bucket $bucket --key $consumerKey | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "consumer state object 未写入 S3。" }
+    $afterMigration = Get-StateAddresses $producerWork
+    if (($beforeMigration -join '|') -cne ($afterMigration -join '|')) {
+        throw 'Local to S3 migration changed the producer resource address set.'
+    }
+    Invoke-Aws @('s3api', 'head-object', '--bucket', $stateBucket, '--key', $producerStateKey) | Out-Null
+    $producerClean = Invoke-Native 'terraform' (@("-chdir=$producerWork", 'plan', '-detailed-exitcode') + $producerBase + @("-var-file=$v1")) @(0, 2)
+    if ($producerClean.ExitCode -ne 0) {
+        throw 'Producer migration did not preserve a clean v1 plan.'
+    }
 
-  $destroyArguments = @("-Action", "Destroy", "-Root", $runtimeRoot, "-StateBucket", $bucket, "-LockTable", $table, "-StatePrefix", $prefix, "-LocalstackEndpoint", $LocalstackEndpoint, "-ReleaseId", "release-$runId")
-  $destroyAudit = @(Invoke-ReleaseAudited -ScriptPath $releaseScript -ReleaseArguments $destroyArguments -ShimDirectory $auditShim -LogPath $auditLog -RealTerraform $realTerraform)
-  Assert-SavedPlanAudit -CommandLines $destroyAudit -ExpectedPlans @("consumer-destroy.tfplan", "producer-destroy.tfplan")
-  $destroyOrder = @(Get-Content (Join-Path $runtimeRoot ".runtime\destroy-order.log"))
-  if ((@($destroyOrder) -join ",") -ne "consumer,producer") { throw "destroy 顺序不是 consumer,producer。" }
-  if (@(& terraform "-chdir=$consumer" state list).Count -ne 0 -or @(& terraform "-chdir=$producer" state list).Count -ne 0) {
-    throw "发布层 destroy 后远端 state 仍有资源。"
-  }
+    $consumerBackendConfig = Join-Path $tempRoot 'consumer.backend.hcl'
+    Write-BackendConfig $consumerBackendConfig $stateBucket $consumerStateKey $lockTable
+    Invoke-Native 'terraform' @("-chdir=$consumerWork", 'init', '-input=false', "-backend-config=$consumerBackendConfig") | Out-Null
+    $consumerInitialized = $true
+    $consumerBase = @('-input=false', "-var=run_id=$runId", "-var=state_bucket=$stateBucket", "-var=localstack_endpoint=$LocalstackEndpoint")
+    $consumerV1Plan = Join-Path $tempRoot 'consumer-v1.tfplan'
+    Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'plan', "-out=$consumerV1Plan") + $consumerBase + @('-var=expected_release_version=v1')) | Out-Null
+    Assert-PlanActions $consumerWork $consumerV1Plan 5 'create' 'consumer v1 saved plan'
+    Invoke-Native 'terraform' @("-chdir=$consumerWork", 'apply', '-input=false', '-auto-approve', $consumerV1Plan) | Out-Null
+    Invoke-Aws @('s3api', 'head-object', '--bucket', $stateBucket, '--key', $consumerStateKey) | Out-Null
 
-  Invoke-Terraform $bootstrap (@("destroy", "-auto-approve", "-input=false", "-no-color") + $bootstrapVars)
-  & aws --endpoint-url $LocalstackEndpoint s3api head-bucket --bucket $bucket 2>$null
-  if ($LASTEXITCODE -eq 0) { throw "bootstrap destroy 后 state bucket 仍存在。" }
-  & aws --endpoint-url $LocalstackEndpoint dynamodb describe-table --table-name $table 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { throw "bootstrap destroy 后 lock table 仍存在。" }
-  Write-Host "Challenge 22 passed: mock + local-to-S3 migration + DynamoDB lock + remote state + saved plans + ordered destroy."
+    foreach ($name in @('api', 'worker')) {
+        $receiptPath = Join-Path $tempRoot "$name-receipt.json"
+        Invoke-Aws @('s3api', 'get-object', '--bucket', $receiptBucket, '--key', "receipts/$name.json", $receiptPath) | Out-Null
+        $receipt = [IO.File]::ReadAllText($receiptPath) | ConvertFrom-Json
+        if ($receipt.contract_version -ne 1 -or $receipt.release_version -ne 'v1' -or
+            $receipt.source_bucket -cne $artifactBucket -or $receipt.source_key -cne "releases/$name.txt" -or
+            [string]$receipt.source_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Receipt $name does not match the v1 producer contract."
+        }
+    }
+
+    $premature = Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'plan', '-no-color') + $consumerBase + @('-var=expected_release_version=v2')) @(1)
+    if ($premature.Text -notmatch 'Producer release is not the expected version') {
+        throw 'Consumer did not reject v2 before the producer published v2.'
+    }
+
+    $producerV2Plan = Join-Path $tempRoot 'producer-v2.tfplan'
+    Invoke-Native 'terraform' (@("-chdir=$producerWork", 'plan', "-out=$producerV2Plan") + $producerBase + @("-var-file=$v2")) | Out-Null
+    Assert-PlanActions $producerWork $producerV2Plan 3 'update' 'producer v2 saved plan'
+    Invoke-Native 'terraform' @("-chdir=$producerWork", 'apply', '-input=false', '-auto-approve', $producerV2Plan) | Out-Null
+    $currentRelease = 'v2'
+
+    $oldConsumer = Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'plan', '-no-color') + $consumerBase + @('-var=expected_release_version=v1')) @(1)
+    if ($oldConsumer.Text -notmatch 'Producer release is not the expected version') {
+        throw 'Consumer did not reject its stale v1 expectation after producer v2.'
+    }
+    $consumerV2Plan = Join-Path $tempRoot 'consumer-v2.tfplan'
+    Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'plan', "-out=$consumerV2Plan") + $consumerBase + @('-var=expected_release_version=v2')) | Out-Null
+    Assert-PlanActions $consumerWork $consumerV2Plan 3 'update' 'consumer v2 saved plan'
+    Invoke-Native 'terraform' @("-chdir=$consumerWork", 'apply', '-input=false', '-auto-approve', $consumerV2Plan) | Out-Null
+
+    foreach ($name in @('api', 'worker')) {
+        $tags = ((Invoke-Aws @('s3api', 'get-object-tagging', '--bucket', $artifactBucket, '--key', "releases/$name.txt", '--output', 'json')).Text | ConvertFrom-Json).TagSet
+        $tagMap = @{}
+        foreach ($tag in $tags) { $tagMap[$tag.Key] = $tag.Value }
+        if ($tagMap.Release -cne 'v2' -or $tagMap.RunId -cne $runId -or [string]$tagMap.Sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Producer object $name has an invalid v2 tag contract."
+        }
+    }
+
+    $producerFinal = Invoke-Native 'terraform' (@("-chdir=$producerWork", 'plan', '-detailed-exitcode') + $producerBase + @("-var-file=$v2")) @(0, 2)
+    $consumerFinal = Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'plan', '-detailed-exitcode') + $consumerBase + @('-var=expected_release_version=v2')) @(0, 2)
+    if ($producerFinal.ExitCode -ne 0 -or $consumerFinal.ExitCode -ne 0) {
+        throw 'The final producer or consumer plan is not clean.'
+    }
+
+    Invoke-Native 'terraform' (@("-chdir=$consumerWork", 'destroy', '-auto-approve') + $consumerBase + @('-var=expected_release_version=v2')) | Out-Null
+    $consumerInitialized = $false
+    $receiptRemaining = (Invoke-Aws @('s3api', 'list-buckets', '--query', "Buckets[?Name=='$receiptBucket'].Name", '--output', 'text')).Text.Trim()
+    $artifactStillPresent = (Invoke-Aws @('s3api', 'list-buckets', '--query', "Buckets[?Name=='$artifactBucket'].Name", '--output', 'text')).Text.Trim()
+    if ($receiptRemaining -or -not $artifactStillPresent) {
+        throw 'Consumer-first destroy did not preserve the producer while removing receipts.'
+    }
+
+    Invoke-Native 'terraform' (@("-chdir=$producerWork", 'destroy', '-auto-approve') + $producerBase + @("-var-file=$v2")) | Out-Null
+    $producerInitialized = $false
+    $artifactRemaining = (Invoke-Aws @('s3api', 'list-buckets', '--query', "Buckets[?Name=='$artifactBucket'].Name", '--output', 'text')).Text.Trim()
+    if ($artifactRemaining) {
+        throw 'Producer artifact bucket remained after ordered destroy.'
+    }
+
+    Invoke-Aws @('dynamodb', 'delete-table', '--table-name', $lockTable, '--region', 'us-east-1') | Out-Null
+    Invoke-Aws @('dynamodb', 'wait', 'table-not-exists', '--table-name', $lockTable, '--region', 'us-east-1') | Out-Null
+    $lockTable = $null
+    Remove-VersionedBucket $stateBucket
+    $stateBucket = $null
+
+    Write-Host '[e2e] local saved plan -> S3 migration -> remote contract -> v2 saved plans -> ordered destroy passed.'
+    Write-Host 'PASS challenge-22 (alignment A, difficulty 96/100)'
 }
 finally {
-  if (Test-Path $releaseScript) {
-    try {
-      & pwsh -NoProfile -File $releaseScript -Action Destroy -Root $runtimeRoot -StateBucket $bucket -LockTable $table -StatePrefix $prefix -LocalstackEndpoint $LocalstackEndpoint -ReleaseId "release-$runId" 2>$null | Out-Null
+    if ($consumerInitialized -and $runId -and (Test-Path -LiteralPath $consumerWork)) {
+        try {
+            Invoke-Native 'terraform' @("-chdir=$consumerWork", 'destroy', '-auto-approve', '-input=false', "-var=run_id=$runId", "-var=state_bucket=$stateBucket", "-var=localstack_endpoint=$LocalstackEndpoint", "-var=expected_release_version=$currentRelease") @(0, 1) | Out-Null
+        }
+        catch {}
     }
-    catch { Write-Warning "兜底 workload destroy 失败：$($_.Exception.Message)" }
-  }
-  if ((Test-Path $bootstrap) -and (Test-Path (Join-Path $bootstrap "terraform.tfstate"))) {
-    try { & terraform "-chdir=$bootstrap" destroy -auto-approve -input=false -no-color "-var=localstack_endpoint=$LocalstackEndpoint" "-var=state_bucket_name=$bucket" "-var=lock_table_name=$table" 2>$null | Out-Null }
-    catch { Write-Warning "兜底 bootstrap destroy 失败：$($_.Exception.Message)" }
-  }
-  $env:AWS_ACCESS_KEY_ID = $oldAccess
-  $env:AWS_SECRET_ACCESS_KEY = $oldSecret
-  $env:AWS_DEFAULT_REGION = $oldRegion
-  if (Test-Path $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
+    if ($producerInitialized -and $runId -and (Test-Path -LiteralPath $producerWork)) {
+        try {
+            $fixture = if ($currentRelease -eq 'v2') { 'release-v2.tfvars.json' } else { 'release-v1.tfvars.json' }
+            Invoke-Native 'terraform' @("-chdir=$producerWork", 'destroy', '-auto-approve', '-input=false', "-var=run_id=$runId", "-var=localstack_endpoint=$LocalstackEndpoint", "-var-file=$(Join-Path $fixtureRoot $fixture)") @(0, 1) | Out-Null
+        }
+        catch {}
+    }
+    if ($lockTable) {
+        try { Invoke-Aws @('dynamodb', 'delete-table', '--table-name', $lockTable, '--region', 'us-east-1') @(0, 255) | Out-Null } catch {}
+    }
+    if ($stateBucket) {
+        try { Remove-VersionedBucket $stateBucket } catch {}
+    }
+    foreach ($name in $envBefore.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $envBefore[$name])
+    }
+    Get-Process 'terraform-provider-*' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $tempRoot) {
+        $resolvedTemp = [IO.Path]::GetFullPath($tempRoot)
+        $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+        if ($resolvedTemp.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) {
+            try { Remove-Item -LiteralPath $resolvedTemp -Recurse -Force } catch {}
+        }
+    }
 }

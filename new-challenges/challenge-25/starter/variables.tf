@@ -1,19 +1,19 @@
 variable "aws_region" {
-  type        = string
-  description = "LocalStack 使用的 AWS 区域"
-  default     = "us-east-1"
+  type    = string
+  default = "us-east-1"
+  # TODO: restrict this lab to us-east-1.
 }
 
 variable "localstack_endpoint" {
-  type        = string
-  description = "LocalStack edge endpoint"
-  default     = "http://localhost:4566"
+  type    = string
+  default = "http://localhost:4566"
+  # TODO: require a loopback root origin with an explicit valid port.
 }
 
 variable "name_prefix" {
-  type        = string
-  description = "唯一资源前缀"
-  default     = "tfpro-c25"
+  type    = string
+  default = "tfpro-c25"
+  # TODO: validate a safe lowercase prefix.
 }
 
 variable "application" {
@@ -24,18 +24,16 @@ variable "application" {
 variable "environment" {
   type    = string
   default = "dev"
-  # TODO: 只接受 dev、stage、prod。
+  # TODO: allow only dev, stage, prod.
 }
 
 variable "config_version" {
   type    = number
   default = 1
-  # TODO: 必须为正整数。
+  # TODO: require a positive integer.
 }
 
 variable "config_path" {
-  type        = string
-  description = "配置 JSON 路径"
-  default     = "../fixtures/config-v1.json"
+  type    = string
+  default = "../fixtures/config-v1.json"
 }
-

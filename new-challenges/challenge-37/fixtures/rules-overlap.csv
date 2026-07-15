@@ -1,3 +1,0 @@
-rule_id,direction,protocol,from_port,to_port,cidr,description,enabled
-range-a,ingress,tcp,8000,8100,10.10.0.0/16,first range,true
-range-b,ingress,tcp,8050,8200,10.10.0.0/16,overlap range,true

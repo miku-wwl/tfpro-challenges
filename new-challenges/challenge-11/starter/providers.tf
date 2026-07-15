@@ -1,4 +1,5 @@
 provider "aws" {
+  alias                       = "primary"
   region                      = var.primary_region
   access_key                  = "test"
   secret_key                  = "test"

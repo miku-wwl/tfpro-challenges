@@ -9,8 +9,6 @@ provider "aws" {
 
   endpoints {
     s3  = var.localstack_endpoint
-    sns = var.localstack_endpoint
     sts = var.localstack_endpoint
   }
 }
-

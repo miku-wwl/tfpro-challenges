@@ -1,7 +1,6 @@
-team,workload,policy,session_seconds
-platform,delivery,artifact-publisher,3600
-platform,delivery,unknown-policy,3600
-payments,ledger,missing-policy,3500
-security,detector,empty-policy,3600
-operations,publisher,wildcard-policy,50000
-
+team,workload,policy
+platform,delivery,artifact-publisher
+platform,delivery,unknown-policy
+payments,ledger,missing-policy
+security,detector,empty-policy
+operations,publisher,wildcard-policy

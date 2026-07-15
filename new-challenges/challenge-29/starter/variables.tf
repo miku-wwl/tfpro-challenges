@@ -19,7 +19,7 @@ variable "primary_region" {
 variable "dr_region" {
   type    = string
   default = "us-west-2"
-  # TODO: Reject the primary region.
+  # TODO: validate region syntax and add a cross-variable check that rejects primary_region.
 }
 variable "localstack_endpoint" {
   type    = string

@@ -1,19 +1,22 @@
 id: challenge-27
-title: 可审计的 S3/SNS 发布与恢复流水线
-score: 97
-timebox: 135m
+title: 可审计的 S3 制品发布与漂移修复
+score: 95
+alignment: A
+timebox: 75m
 runtime: localstack
+terraform_version: "~> 1.6"
 services:
   - s3
-  - sns
   - sts
 objectives:
-  - 建立 S3 release object 到 SNS 通知的发布链路
-  - 用 saved plan 和 terraform show -json 执行 allowlist 审计
-  - 正确处理 detailed-exitcode 并生成机器可读 evidence
-  - 演练 state backup/restore、refresh-only 漂移恢复和失败发布回滚证据
+  - "1b/1c: 使用 saved plan 完成可审计的 plan/apply/destroy 生命周期"
+  - "1e: 识别并精确修复 S3 对象带外漂移"
+  - "2a/2c/2d/2e: 将 JSON 合同规范化为稳定 for_each graph，并使用 functions、lifecycle 与 checks"
+  - "3c: 在非交互自动化中审计 plan JSON 并 apply 同一个 plan"
 invariants:
+  - 候选人只修改 Terraform HCL，不提交发布或恢复脚本
+  - managed AWS 类型只允许 aws_s3_bucket 与 aws_s3_object
   - AWS 调用只允许发送到 loopback LocalStack endpoint
-  - 未通过 JSON plan 审计的 plan 不得 apply
-  - state drill 与失败 drill 前后远端资源必须保持不变
-  - 漂移恢复和成功发布结束时必须得到 detailed-exitcode 0
+  - manifest 数组重排必须保持地址、对象 key、规范摘要和远端资源不变
+  - 漂移修复 plan 只能更新被篡改的对象
+  - clean 与 destroy 后必须确认 LocalStack 零残留

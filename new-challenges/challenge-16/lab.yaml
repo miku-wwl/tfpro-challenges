@@ -1,14 +1,18 @@
 id: challenge-16
-title: Terraform CLI 自动化与故障恢复
-score_vs_tf_pro: 91
-timebox_minutes: 90
+title: Saved plan refresh-only and real S3 drift recovery
+difficulty: expert
+score_vs_tf_pro: 95
+alignment: A
+timebox_minutes: 75
 terraform_version: "~> 1.6"
-providers:
-  - hashicorp/local ~> 2.5.0
-execution: local-powershell-grader
-objectives:
-  - automate-saved-plan-workflows
-  - interpret-detailed-exitcode-and-json-plan
-  - detect-and-record-drift-with-refresh-only
-  - back-up-and-restore-state-safely
-safe_by_default: true
+providers: [hashicorp/aws ~> 5.100.0]
+execution: localstack
+objectives: [1b, 1c, 1d, 1e, 2a, 2c, 2d, 2e, 3c, 5b, 5c, 5d]
+services: [s3, sts]
+invariants:
+  - candidate_is_terraform_hcl_only
+  - canonical_tests_use_no_mock_or_override
+  - reordered_catalog_is_address_and_hash_stable
+  - refresh_only_records_real_drift_before_precise_repair
+  - no_destructive_state_mutation
+  - saved_destroy_leaves_zero_residue

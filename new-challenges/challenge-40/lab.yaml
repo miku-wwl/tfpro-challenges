@@ -1,35 +1,31 @@
 id: challenge-40
-title: 双 State 制品合同发布与运行时晋级 Capstone
-score: 98
-exam_timebox: 75m
+title: 双 State 制品合同与跨区域滚动发布 Capstone
+score: 97
+alignment: A
+exam_timebox: 85m
 study_timebox: 150m
 runtime: localstack
-services:
-  - s3
-  - ec2
-  - iam
-  - sts
+services: [s3, ec2, iam, sts]
 concepts:
-  - terraform_remote_state
+  - partial-s3-backend
+  - terraform-remote-state
   - versioned-release-contract
-  - manifest-validation
   - provider-aliases
-  - nested-modules
+  - external-network-data
   - stable-for-each
-  - saved-plan-json-gate
-  - controlled-replacement
+  - saved-plan-json
+  - controlled-rollout
   - drift-recovery
 objectives:
-  - Publish manifest-driven S3 objects and a versioned release contract from an artifact state
-  - Consume only the release contract through terraform_remote_state from an independent runtime state
-  - Route primary and DR workloads through explicit providers and a reusable regional module
-  - Preserve fleet and replica identity when the runtime catalog is reordered
-  - Gate saved plans and prove a release upgrade causes only the intended runtime rollout
-  - Recover drift and destroy the two states in reverse dependency order
+  - Publish and validate a digest-bound artifact contract from one S3 state
+  - Consume the contract from an isolated runtime S3 state
+  - Route official EC2 resources across static primary and DR module slots
+  - Audit the real Terraform 1.6 provider action contract for a v1 to v2 rollout
+  - Prove reorder stability, drift repair, reverse destroy, and zero residue
 invariants:
-  - Artifact and runtime roots own independent local state files
-  - Runtime never reads artifact files or S3 objects directly
+  - Candidate contains HCL only and manages no VPC or subnet
+  - Candidate uses no terraform_data, mocks, capacity emulation, or ignore_changes
   - Every AWS request uses loopback LocalStack and literal test credentials
-  - Fleet identity is name@location and replica identity is name@location#NN
-  - Saved release plans reject actions outside the declared allowlist
-  - Runtime is destroyed before artifact
+  - Artifact and runtime states remain isolated in separate S3 keys
+  - Boot-time release changes replace instances with create-before-destroy ordering
+  - Final plans are clean and LocalStack has zero run-scoped residue

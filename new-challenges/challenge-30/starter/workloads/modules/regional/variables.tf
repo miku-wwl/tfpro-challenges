@@ -1,37 +1,6 @@
-variable "run_id" {
-  type = string
-}
-
-variable "role" {
-  type = string
-}
-
-variable "deployments" {
-  type = map(object({
-    name        = string
-    owner       = string
-    environment = string
-    locations   = list(string)
-    location    = string
-    port        = number
-    enabled     = bool
-  }))
-}
-
-variable "network_contract" {
-  type = object({
-    region    = string
-    vpc_id    = string
-    subnet_id = string
-    cidr      = string
-  })
-}
-
-variable "platform_contract" {
-  type = object({
-    region     = string
-    sg_id      = string
-    topic_arn  = string
-    table_name = string
-  })
-}
+variable "bucket" { type = string }
+variable "location" { type = string }
+variable "run_id" { type = string }
+variable "workloads" { type = map(any) }
+variable "identity_contract" { type = any }
+variable "platform_contract" { type = any }

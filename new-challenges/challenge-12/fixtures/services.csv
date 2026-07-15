@@ -1,4 +1,4 @@
 service,environment,subnet_slot,enabled
 payments,prod,20,true
 catalog,prod,10,true
-preview,dev,30,false
+preview,dev,30,true

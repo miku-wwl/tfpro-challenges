@@ -1,57 +1,37 @@
-# Challenge 15：CSV 驱动的网络与安全规则工厂
+# Challenge 15：Subnet Data Source 驱动的稳定安全组规则
 
-难度：**89 / 100**　建议用时：**75 分钟**
+难度：**95 / 100**；考纲契合度：**A**；考试模式 **75 分钟**，首次完整学习 **120 分钟**。
 
-## 场景
+grader 会在本机 LocalStack 预置一个隔离 VPC 和带 `Network`/`Tier` tags 的 app、data subnets。
+你只修改 `starter/` Terraform HCL：查询既有 subnet，把 CSV 转成稳定的 security groups 与独立 ingress
+rule resources。不要创建 VPC/subnet，不要编写候选脚本。
 
-平台团队从 CMDB 导出安全规则。你需要查询既有 VPC 与子网，把 CSV 转换为稳定的 Security Group 和独立 ingress/egress rule 资源。CSV 会被重新排序，也会同时包含其他环境、停用规则和不同 owner；一次无意义的行顺序变化不能导致资源换地址。
+## Terraform 任务
 
-本题默认连接本机 LocalStack；canonical tests 仍使用 AWS mock provider快速验证输出，
-完成题目后可在 LocalStack 中执行真实 plan/apply/destroy。
-
-## 开始
-
-```powershell
-cd tmp2/challenge-15/starter
-terraform init
-pwsh ../tests/grade.ps1 -Root .
-```
-
-只修改 `starter/`。`fixtures/` 是输入合同，不要通过修改 fixture 让测试通过。
-
-## 任务
-
-1. 完成 `target_environment` validation，只允许 `dev`、`staging`、`prod`。
-2. 使用 `data.aws_vpc.selected` 按 `Name` tag 查询 VPC；使用一个带 `for_each` 的 `data.aws_subnet.selected` 按 tier 查询所需子网。
-3. `csvdecode` 后显式转换端口和布尔值；只保留目标环境且 `enabled=true` 的规则。
-4. 每个活跃 service 只创建一个 `aws_security_group.workload`。
-5. 分别使用一个 ingress 和一个 egress resource block 创建规则。`office`、`partners` 来自变量映射，`vpc` 必须解析为查询到的 VPC CIDR，合法 CIDR 可直接使用。
-6. `for_each` key 必须由规则业务身份组成，不能使用行号。调换 CSV 行顺序后，地址集合必须不变。
-7. 输出排序后的 service、ingress/egress key、按 owner 分组的 key，以及 subnet ID 映射。
+1. 用带 `for_each` 的 `data.aws_subnet.selected`，同时按 `Network` 与 `Tier` tag 查询两个 subnet。
+2. `csvdecode` 后显式转换端口和布尔值，只保留目标环境、enabled、ingress 行。
+3. 校验环境、字段、端口、协议、tier 与 CIDR/source alias；非法合同独立失败。
+4. 每个服务只创建一个 `aws_security_group.workload`，VPC ID 必须来自该服务 tier 的 subnet data。
+5. 用一个 `aws_vpc_security_group_ingress_rule.this` block 创建所有规则；业务字段组成稳定 key。
+6. CSV 重排必须保持地址和 clean plan；所有 map/list output 必须确定排序。
+7. provider 只允许 `test/test`，且 EC2/STS endpoint 必须是 loopback LocalStack。
 
 ## 验收
 
 ```powershell
-terraform fmt -check -recursive .
-terraform validate
-pwsh ../tests/grade.ps1 -Root .
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1
 ```
 
-测试会验证默认输入、重排输入、mock data source 结果，以及非法环境 validation。
+grader 使用 Terraform 1.6.6 的 **6 个普通 plan tests**，不使用 mock/override；真实阶段审计并 apply saved
+plan、检查 subnet 查询和远端 SG rules、验证重排 no-op、带外 revoke 一条规则、精确 saved-plan 修复、
+clean plan、saved destroy，并删除 grader fixture 后确认 EC2 零残留。
 
-## 不变量
+## 考纲映射
 
-- CSV 行顺序不属于资源身份。
-- `dev` 和停用规则不会出现在 `prod` plan。
-- SG 与 rule 使用查询得到的 VPC，不硬编码 VPC/subnet ID。
-- 相同 owner 下的 key 排序固定，所有输出可供下游自动化消费。
+- **1b–1e**：saved plan/apply/destroy、真实 drift 与修复；
+- **2a–2e**：checks、subnet data source、CSV 函数、稳定 `for_each`、复杂 outputs；
+- **3c**：非交互 saved-plan workflow（由 grader 执行）；
+- **5b / 5c / 5d**：AWS provider、LocalStack 凭证与 endpoint 排障。
 
-## 安全边界
-
-- provider 只使用固定 `test/test` 凭证，EC2/STS endpoint 必须指向 loopback LocalStack。
-- 不要把 endpoint 改成真实 AWS；`test/test` 不是生产凭证方案。
-- 不修改 fixtures 来迁就实现。
-
-## Terraform Professional objective
-
-覆盖 Professional 大纲中的复杂 HCL authoring、data source 查询、collection transformation、`for_each` 资源身份、输入验证、provider schema 推理，以及可预测 plan 的生产级设计。
+AWS candidate workload 仅使用公开考试资源清单中的 `aws_subnet` data source、`aws_security_group` 与
+`aws_vpc_security_group_ingress_rule`。

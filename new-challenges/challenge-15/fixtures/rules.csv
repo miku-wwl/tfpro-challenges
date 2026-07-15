@@ -1,9 +1,9 @@
-service,environment,direction,protocol,from_port,to_port,source,enabled,owner
-api,prod,ingress,tcp,443,443,office,true,platform
-worker,prod,egress,tcp,5432,5432,vpc,true,data
-api,prod,egress,tcp,443,443,0.0.0.0/0,true,platform
-worker,prod,ingress,tcp,9100,9100,vpc,true,data
-admin,prod,ingress,tcp,22,22,partners,false,security
-api,dev,ingress,tcp,8443,8443,office,true,platform
-admin,prod,ingress,tcp,22,22,office,true,security
+service,environment,subnet_tier,direction,protocol,from_port,to_port,source,enabled,owner
+api,prod,app,ingress,tcp,443,443,office,true,platform
+worker,prod,data,egress,tcp,5432,5432,10.42.0.0/16,true,data
+api,prod,app,egress,tcp,443,443,0.0.0.0/0,true,platform
+worker,prod,data,ingress,tcp,9100,9100,10.42.0.0/16,true,data
+admin,prod,app,ingress,tcp,22,22,partners,false,security
+api,dev,app,ingress,tcp,8443,8443,office,true,platform
+admin,prod,app,ingress,tcp,22,22,office,true,security
 

@@ -1,7 +1,7 @@
 output "provider_regions" {
   value = {
-    primary  = data.aws_region.primary.name
-    recovery = data.aws_region.recovery.name
+    primary  = var.primary_region
+    recovery = var.recovery_region
   }
 }
 

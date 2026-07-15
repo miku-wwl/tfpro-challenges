@@ -1,2 +1,2 @@
-rule_id,direction,protocol,from_port,to_port,cidr,description,enabled
-web,ingress,tcp,443,443,10.10.0.0/16,web,maybe
+rule_id,protocol,from_port,to_port,cidr,description,enabled
+web,tcp,443,443,10.10.0.0/16,web,maybe

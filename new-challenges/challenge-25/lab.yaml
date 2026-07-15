@@ -1,19 +1,23 @@
 id: challenge-25
-title: 配置制品的生命周期、导入与漂移恢复
-score: 95
-timebox: 110m
+title: 声明式接管与版本化 S3 配置恢复
+score: 96
+alignment: A
+timebox: 80m
 runtime: localstack
+terraform_version: "~> 1.6"
 services:
   - s3
-  - dynamodb
   - sts
 objectives:
-  - 用 S3 对象和 DynamoDB item 发布同一配置版本
-  - 使用 replace_triggered_by、precondition、postcondition 和 prevent_destroy 建模生命周期
-  - 在不重建远端资源的情况下恢复 S3 bucket 的 state ownership
-  - 用 refresh-only 记录漂移，再以普通 plan/apply 恢复声明状态
+  - "1e: 用 Terraform 1.6 import block 接管预存 S3 bucket 并恢复 object 漂移"
+  - "1b/1c/1d: 审计并应用 initial、upgrade、repair 与 destroy saved plans"
+  - "2a/2c/2d/2e: 使用 JSON functions、for_each、replace_triggered_by 和 conditions"
 invariants:
-  - AWS 调用只允许发送到 loopback LocalStack endpoint
-  - S3 bucket 必须受 prevent_destroy 保护
-  - 配置版本或内容摘要变化必须替换 S3 object 与 DynamoDB item
-  - 导入后和漂移恢复后都必须得到 clean plan
+  - managed_aws_types_are_only_s3_bucket_and_s3_object
+  - no_manual_state_commands_or_candidate_scripts
+  - no_dynamodb_terraform_data_or_prevent_destroy_cleanup_drill
+  - initial_plan_imports_without_recreating_bucket
+  - upgrade_updates_revision_pointer_replaces_current_and_rotates_one_revision
+  - refresh_only_and_repair_touch_only_current_object
+  - terraform_1_6_tests_use_no_mock_or_override
+  - saved_destroy_leaves_zero_s3_residue

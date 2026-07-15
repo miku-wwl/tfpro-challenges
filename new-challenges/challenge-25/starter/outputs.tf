@@ -1,16 +1,12 @@
 output "revision_identity" {
-  value = "${var.config_version}:${local.digest}"
+  value = "${var.config_version}:${local.config_sha256}"
 }
 
 output "bucket_name" {
-  value = aws_s3_bucket.config.id
+  value = local.bucket_name
 }
 
-output "object_key" {
-  value = aws_s3_object.config.key
+output "object_keys" {
+  # TODO: expose current, revision pointer, and immutable revision keys without content.
+  value = null
 }
-
-output "table_name" {
-  value = aws_dynamodb_table.config.name
-}
-

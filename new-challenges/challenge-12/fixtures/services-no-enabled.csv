@@ -1,0 +1,3 @@
+service,environment,subnet_slot,enabled
+catalog,prod,10,false
+orders,dev,15,true

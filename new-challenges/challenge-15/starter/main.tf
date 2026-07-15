@@ -12,74 +12,46 @@ provider "aws" {
   }
 }
 
-data "aws_vpc" "selected" {
-  # TODO: 按 Name tag 查询 var.vpc_name。
-}
-
 data "aws_subnet" "selected" {
-  # TODO: 用 subnet_tiers 作为稳定的 for_each，并同时按 VPC 与 Tier tag 查询。
   for_each = var.subnet_tiers
+
+  # TODO 1: query each subnet by the Network and Tier tags.
 }
 
 locals {
   raw_rules = csvdecode(file(var.rules_file))
 
-  rules = [
-    for index, row in local.raw_rules : {
-      # TODO: index 不是业务身份；完成显式类型转换。
-      key         = tostring(index)
-      service     = row.service
-      environment = row.environment
-      direction   = row.direction
-      protocol    = row.protocol
-      from_port   = row.from_port
-      to_port     = row.to_port
-      source      = row.source
-      enabled     = row.enabled
-      owner       = row.owner
-    }
-  ]
+  # TODO 2: normalize number/bool/string fields and retain enabled ingress rows for the target environment.
+  selected_rules = []
 
-  # TODO: 同时按环境和 enabled 过滤。
-  active_rules = local.rules
-  services     = toset([for rule in local.active_rules : rule.service])
+  # TODO 3: key rules by semantic identity and services by service name; resolve source aliases.
+  ingress_rules = {}
+  services      = {}
+}
 
-  # TODO: 创建稳定的 ingress_rules、egress_rules 和 rules_by_owner 映射。
-  ingress_rules  = {}
-  egress_rules   = {}
-  rules_by_owner = {}
+check "rule_contract" {
+  assert {
+    condition     = length(local.ingress_rules) > 0
+    error_message = "Selected ingress rules must use valid ports, tiers, protocols, and CIDR/source aliases."
+  }
 }
 
 resource "aws_security_group" "workload" {
-  for_each = local.services
+  # TODO 4: create one SG per selected service in the VPC discovered from its subnet tier.
+  for_each = {}
 
-  name   = "${var.target_environment}-${each.key}"
-  vpc_id = data.aws_vpc.selected.id
-
-  tags = {
-    Environment = var.target_environment
-    Service     = each.key
-  }
+  name   = "${var.name_prefix}-${each.key}"
+  vpc_id = each.value.vpc_id
+  tags   = { ManagedBy = "terraform", Challenge = "15", Service = each.key }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "this" {
   for_each = local.ingress_rules
 
-  # TODO: 关联 service SG，并解析 source alias、vpc 或直接 CIDR。
   security_group_id = aws_security_group.workload[each.value.service].id
-  cidr_ipv4         = each.value.source
+  cidr_ipv4         = each.value.cidr_ipv4
   ip_protocol       = each.value.protocol
   from_port         = each.value.from_port
   to_port           = each.value.to_port
-}
-
-resource "aws_vpc_security_group_egress_rule" "this" {
-  for_each = local.egress_rules
-
-  # TODO: 与 ingress 使用相同的来源解析规则。
-  security_group_id = aws_security_group.workload[each.value.service].id
-  cidr_ipv4         = each.value.source
-  ip_protocol       = each.value.protocol
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
+  tags              = { ManagedBy = "terraform", RuleKey = each.key }
 }

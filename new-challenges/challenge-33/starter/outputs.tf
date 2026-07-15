@@ -1,15 +1,20 @@
-# TODO: 输出 workspace、稳定服务 key、bucket/topic 名称及 owner 合同。
+# TODO: 输出 environment、稳定服务 key、bucket/object 合同及 owner 合同。
+output "catalog_guard" {
+  value = false
+  # TODO: 用 precondition 阻断任何非法目录。
+}
+
 output "release_contract" {
   value = {
-    workspace   = "TODO"
-    services    = []
-    buckets     = {}
-    topics      = {}
-    topic_names = {}
-    owners      = {}
-    workspace_tags = {
+    environment  = "TODO"
+    services     = []
+    buckets      = {}
+    objects      = {}
+    object_etags = {}
+    owners       = {}
+    environment_tags = {
       buckets = {}
-      topics  = {}
+      objects = {}
     }
   }
 }

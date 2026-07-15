@@ -1,64 +1,36 @@
-mock_provider "aws" {
-  alias = "primary"
-
-  mock_data "aws_region" {
-    defaults = { name = "us-east-1" }
-  }
-  mock_resource "aws_s3_bucket" {
-    defaults = { id = "primary-bucket" }
-  }
-  mock_resource "aws_dynamodb_table" {
-    defaults = { name = "primary-table" }
-  }
-  mock_resource "aws_sns_topic" {
-    defaults = { arn = "arn:aws:sns:us-east-1:000000000000:primary-events" }
-  }
-}
-
-mock_provider "aws" {
-  alias = "dr"
-
-  mock_data "aws_region" {
-    defaults = { name = "us-west-2" }
-  }
-  mock_resource "aws_s3_bucket" {
-    defaults = { id = "dr-bucket" }
-  }
-  mock_resource "aws_dynamodb_table" {
-    defaults = { name = "dr-table" }
-  }
-  mock_resource "aws_sns_topic" {
-    defaults = { arn = "arn:aws:sns:us-west-2:000000000000:dr-events" }
-  }
-}
-
 run "stable_filtered_catalog" {
   command = plan
 
   assert {
     condition     = join(",", output.service_keys) == "api,metrics,worker"
-    error_message = "Only enabled prod services may be selected, keyed by service name."
+    error_message = "Only enabled prod services may be selected with stable names."
   }
+
   assert {
-    condition     = join(",", sort(keys(output.regional_contracts))) == "dr,primary"
-    error_message = "The replication contract must expose primary and dr."
+    condition = (
+      output.regional_contracts.primary.api.bucket == "tfpro-c29-api-primary" &&
+      output.regional_contracts.dr.api.bucket == "tfpro-c29-api-dr"
+    )
+    error_message = "Primary and DR bucket identities are crossed."
   }
+
   assert {
-    condition     = output.regional_contracts.primary.api.table == "tfpro-c29-api-primary" && output.regional_contracts.dr.api.table == "tfpro-c29-api-dr"
-    error_message = "Primary and DR regional resource contracts are crossed."
+    condition     = output.regional_contracts.dr.api.peer_bucket == output.regional_contracts.primary.api.bucket
+    error_message = "DR must consume the matching primary bucket contract."
   }
+
   assert {
-    condition     = output.regional_contracts.dr.api.peer_topic == output.regional_contracts.primary.api.topic
-    error_message = "DR must consume the matching primary SNS topic contract."
-  }
-  assert {
-    condition     = join(",", output.services_by_owner.platform) == "api" && join(",", output.services_by_owner.data) == "worker"
-    error_message = "Owner grouping is incomplete or unstable."
+    condition = (
+      output.regional_contracts.primary.api.region == "us-east-1" &&
+      output.regional_contracts.dr.api.region == "us-west-2"
+    )
+    error_message = "Provider-region contracts are incomplete."
   }
 }
 
 run "reordered_catalog_is_stable" {
   command = plan
+
   variables {
     catalog_file = "../fixtures/services-reordered.csv"
   }
@@ -67,32 +39,75 @@ run "reordered_catalog_is_stable" {
     condition     = join(",", output.service_keys) == "api,metrics,worker"
     error_message = "CSV row order must not change service identity."
   }
+
   assert {
-    condition     = output.regional_contracts.dr.metrics.peer_topic == output.regional_contracts.primary.metrics.topic
-    error_message = "The DR-to-primary topic contract must remain keyed by service name."
+    condition     = output.regional_contracts.dr.metrics.peer_bucket == output.regional_contracts.primary.metrics.bucket
+    error_message = "The keyed DR-to-primary contract must survive reordering."
+  }
+}
+
+run "owner_groups_are_deterministic" {
+  command = plan
+
+  assert {
+    condition = (
+      join(",", output.services_by_owner.platform) == "api" &&
+      join(",", output.services_by_owner.data) == "worker" &&
+      join(",", output.services_by_owner.observability) == "metrics"
+    )
+    error_message = "Owner grouping is incomplete or unstable."
+  }
+}
+
+run "dev_catalog_selects_only_admin" {
+  command = plan
+
+  variables {
+    target_environment = "dev"
+  }
+
+  assert {
+    condition     = join(",", output.service_keys) == "admin"
+    error_message = "Environment filtering must occur before graph construction."
   }
 }
 
 run "reject_unknown_environment" {
   command = plan
+
   variables {
     target_environment = "qa"
   }
+
   expect_failures = [var.target_environment]
 }
 
 run "reject_same_region" {
   command = plan
+
   variables {
     dr_region = "us-east-1"
   }
-  expect_failures = [var.dr_region]
+
+  expect_failures = [check.distinct_regions]
 }
 
 run "reject_bad_run_id" {
   command = plan
+
   variables {
     run_id = "BAD"
   }
+
   expect_failures = [var.run_id]
+}
+
+run "reject_public_endpoint" {
+  command = plan
+
+  variables {
+    localstack_endpoint = "https://s3.amazonaws.com:443"
+  }
+
+  expect_failures = [var.localstack_endpoint]
 }

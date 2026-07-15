@@ -1,14 +1,18 @@
 id: challenge-15
-title: CSV 驱动的网络与安全规则工厂
-score_vs_tf_pro: 89
+title: Subnet data source driven stable security-group rules
+difficulty: expert
+score_vs_tf_pro: 95
+alignment: A
 timebox_minutes: 75
 terraform_version: "~> 1.6"
 providers:
   - hashicorp/aws ~> 5.100.0
-execution: localstack-and-terraform-test-mock-provider
-objectives:
-  - query-infrastructure-with-data-sources
-  - transform-external-data-with-for-expressions
-  - create-stable-resource-identities-with-for-each
-  - validate-and-group-complex-data
-safe_by_default: true
+execution: localstack
+objectives: [1b, 1c, 1d, 1e, 2a, 2b, 2c, 2d, 2e, 3c, 5b, 5c, 5d]
+services: [ec2, sts]
+invariants:
+  - candidate_uses_only_published_exam_aws_resources
+  - canonical_tests_are_terraform_1_6_compatible
+  - csv_reorder_preserves_resource_addresses
+  - real_rule_drift_is_detected_and_repaired
+  - saved_plan_apply_destroy_and_zero_residue

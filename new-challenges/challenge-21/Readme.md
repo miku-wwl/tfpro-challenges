@@ -1,25 +1,45 @@
-# Challenge 21：CSV 驱动的网络与安全规则工厂
+# Challenge 21：既有网络上的 CSV 安全规则工厂
 
-**难度：95 / 100（Terraform Professional = 100）**  
-**建议时间：100 分钟**
+难度：**96 / 100**；考纲契合度：**A**；考试模式 **80 分钟**，首次完整学习 **130 分钟**。
 
-平台团队用复杂对象定义 VPC 与 subnets，用 CSV 管理不同环境的 ingress rules。你需要把弱类型 CSV 转成稳定、可验证的 Terraform resource graph。
+平台已经创建 VPC 和三个 subnet，并把按业务 key 索引的 subnet ID map 交给你。你不能在候选配置中管理 VPC/subnet；任务是用公开清单中的 `aws_subnet` data source 回读真实 CIDR/VPC 身份，再把 CSV 规则编译为稳定的 security-group graph。
 
-完成 `starter/`：
+只修改 `starter/` 中的 Terraform HCL；grader 会外部创建和清理网络。不得修改 fixtures/tests 或编写候选脚本。
 
-1. 严格校验 `network`、`environment`、`rules_csv_path` 与 loopback endpoint。
-2. 将 CSV 的端口、布尔值与字符串标准化成明确类型；只选择目标环境且 `enabled=true` 的行。
-3. `aws_subnet.this`、`aws_security_group.this` 和 ingress rule 都必须使用业务 key；rule 必须以 `rule_id` 为 `for_each` key，绝不能使用 CSV 行号。
-4. 用 `data.aws_vpc.managed` 与 `data.aws_subnet.managed` 回读真实网络，并由 subnet data source 的 CIDR 构造规则。
-5. 用 `check` 验证 rule ID 唯一、subnet 引用有效、端口合法、同一 security group 的 owner 一致。
-6. 输出稳定排序的 active IDs、resource addresses、owner 分组和 topology contract。
-7. 将 `rules.csv` 换成 `rules-reordered.csv` 后必须是零变更 plan，输出与 state 地址完全一致。
-8. 所有本题 AWS 资源都必须带 `RunId = var.run_id`；grader 用每次唯一值按 rule → SG → subnet → VPC 的依赖顺序做失败兜底清理。
+## Terraform 任务
 
-grader 会在 LocalStack 中真实创建 1 个 VPC、3 个 subnet、3 个 security group 与 5 条 ingress rule，随后验证 CSV 重排、clean plan 和 destroy。除 4 个 canonical runs 外，还会实际执行负向 plan，验证 duplicate ID、非法协议/端口、owner 冲突、非法 network 与不存在的 CSV 路径都由预期的 check/validation 报告，而不是在 collection 构造阶段意外崩溃。
+1. 严格验证 environment、name/run ID、loopback endpoint，以及 subnet map 精确包含 `public-a`、`private-a`、`data-a`。
+2. 用 `csvdecode(file(...))` 显式转换 bool、number 和 string；先过滤目标环境及 `enabled=true`。
+3. 用 grouping mode 检测重复 `rule_id`，再以 `rule_id` 构造稳定 `for_each` map；禁止 CSV 行号。
+4. 通过 `data.aws_subnet.managed` 回读三个既有 subnet；security group 的 VPC ID 以及 rule CIDR 都必须来自 data source。
+5. 只管理公开考试清单中的：
+   - `aws_security_group`
+   - `aws_vpc_security_group_ingress_rule`
+6. 通过 output preconditions 独立阻断重复 ID、未知 subnet 引用、非法协议/端口、同组 owner 冲突和非法字段。
+7. 输出排序后的 active IDs、owner 分组、精确 managed addresses 和包含 provider-derived subnet CIDRs/VPC ID 的 topology contract。
+8. canonical 与 reordered CSV 必须得到相同地址和 clean plan；disabled/其他环境行不得进入 graph。
+9. grader 带外删除 `api-from-web` 规则后，saved repair plan 只能重建该地址。
+10. saved destroy 后候选管理的 groups/rules 必须零残留；外部 VPC/subnets 由 grader 随后清理。
+
+本题不使用 `aws_vpc`、`aws_subnet` resource、`data.aws_vpc` 或 `terraform_data`。相较普通 CSV 题，它强调外部 subnet-ID 合同、官方 data source 回读、引用完整性和 owner 分组。
+
+## 验收
 
 ```powershell
-pwsh ./tmp2/challenge-21/tests/grade.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1
 ```
 
-fixtures 是输入合同，不要编辑。禁止使用真实 AWS 凭证或非本机 endpoint。
+grader 使用 Terraform **1.6.6** 执行 **10 个普通 plan runs**，无 `mock_provider` / `override_*`；canonical tests 和 E2E 都读取真实 LocalStack subnet data。
+
+仅运行 canonical tests（grader 仍会创建并清理临时网络）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1 -UnitOnly
+```
+
+## 考纲映射
+
+- **1b / 1c / 1d / 1e**：saved plan、真实规则漂移、repair 和 destroy；
+- **2a / 2c / 2d / 2e**：preconditions、CSV functions、稳定 `for_each`、复杂合同；
+- **2b**：公开清单中的 `aws_subnet` data source；
+- **5b / 5c**：安全 LocalStack provider 配置。

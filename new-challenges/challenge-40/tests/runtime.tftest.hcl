@@ -1,243 +1,67 @@
-mock_provider "aws" {
-  mock_data "aws_ami" {
-    defaults = { id = "ami-primary" }
-  }
-  mock_data "aws_vpc" {
-    defaults = { id = "vpc-primary" }
-  }
-  mock_data "aws_subnets" {
-    defaults = { ids = ["subnet-primary"] }
-  }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-primary", latest_version = 1 }
-  }
-  mock_resource "aws_instance" {
-    defaults = { id = "i-primary" }
-  }
-}
-
-mock_provider "aws" {
-  alias = "dr"
-  mock_data "aws_ami" {
-    defaults = { id = "ami-dr" }
-  }
-  mock_data "aws_vpc" {
-    defaults = { id = "vpc-dr" }
-  }
-  mock_data "aws_subnets" {
-    defaults = { ids = ["subnet-dr"] }
-  }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-dr", latest_version = 1 }
-  }
-  mock_resource "aws_instance" {
-    defaults = { id = "i-dr" }
-  }
-}
-
-run "stable_dual_region_release_rollout" {
+run "stable_dual_region_release" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = {
-      outputs = {
-        release_contract = {
-          contract_version = 1
-          release_version  = "2026.07.1"
-          bucket_name      = "tfpro-c40-release-artifacts"
-          region           = "us-east-1"
-          artifacts = {
-            api    = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
-            worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
-          }
-        }
-      }
-    }
-  }
-
   assert {
-    condition     = join(",", output.fleet_keys) == "api@primary,worker@dr"
-    error_message = "Fleet identity must be stable name@location."
+    condition     = toset(output.fleet_keys) == toset(["api@primary", "worker@dr"])
+    error_message = "fleet name@location identity is wrong"
   }
   assert {
-    condition     = join(",", sort(keys(output.replica_ids))) == "api@primary#01,worker@dr#01"
-    error_message = "Replica identity must be stable name@location#NN."
+    condition     = output.release_version == "2026.07.1" && output.runtime_contracts["api@primary"].artifact_digest == "5b75c35286490e1c356eb9e6c2a49225231db2b169acb8bea07811b077b3a411"
+    error_message = "release contract was not propagated"
   }
   assert {
     condition     = output.runtime_contracts["api@primary"].role == "primary" && output.runtime_contracts["worker@dr"].role == "dr"
-    error_message = "A fleet was routed to the wrong regional module."
+    error_message = "regional module routing is wrong"
   }
   assert {
-    condition     = output.runtime_contracts["api@primary"].artifact_digest == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" && output.runtime_contracts["worker@dr"].artifact_digest == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    error_message = "Artifact digests were not injected into the runtime contract."
+    condition     = length(output.resource_addresses) == 4 && length(output.instance_ids) == 2
+    error_message = "one launch template and instance are required per fleet"
   }
+}
+run "reordered_catalog_is_stable" {
+  command = plan
+  variables { runtime_catalog_path = "../../fixtures/runtime-reordered.json" }
   assert {
-    condition     = output.ami_ids.primary == "ami-primary" && output.ami_ids.dr == "ami-dr"
-    error_message = "Default and DR AMI queries were not isolated by provider."
+    condition     = toset(output.fleet_keys) == toset(["api@primary", "worker@dr"]) && length(output.resource_addresses) == 4
+    error_message = "JSON reorder changed graph identity"
   }
 }
-
-run "reordered_catalog_preserves_identity" {
+run "duplicate_fleet_is_rejected" {
   command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-reordered.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  assert {
-    condition     = join(",", output.fleet_keys) == "api@primary,worker@dr" && join(",", sort(keys(output.replica_ids))) == "api@primary#01,worker@dr#01"
-    error_message = "JSON row order changed managed identity."
-  }
+  variables { runtime_catalog_path = "../../fixtures/runtime-duplicate.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_duplicate_fleet_identity" {
+run "invalid_location_is_rejected" {
   command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-duplicate.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-invalid-location.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_unknown_location" {
+run "missing_artifact_is_rejected" {
   command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-invalid-location.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-missing-artifact.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_incompatible_release_contract" {
+run "bad_catalog_schema_is_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 2, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-bad-schema.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_release_contract_wrong_region" {
+run "bad_fleet_fields_are_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-west-2", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-bad-fields.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_release_contract_bad_version_format" {
+run "empty_catalog_is_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "latest", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-empty.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_release_contract_wrong_bucket" {
+run "invalid_name_is_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "wrong-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-invalid-name.json" }
+  expect_failures = [output.catalog_guard]
 }
-
-run "reject_release_contract_unsafe_artifact_key" {
+run "invalid_instance_type_is_rejected" {
   command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "../escape.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_release_contract_invalid_digest" {
-  command = plan
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_incompatible_catalog_schema" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-bad-schema.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_empty_catalog" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-empty.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_invalid_fleet_name" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-invalid-name.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_invalid_instance_type" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-invalid-instance-type.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_unpublished_artifact" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-missing-artifact.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
-}
-
-run "reject_unsafe_replica_count" {
-  command = plan
-  variables {
-    runtime_catalog_path = "../../fixtures/runtime-invalid-capacity.json"
-  }
-  override_data {
-    target = data.terraform_remote_state.artifact
-    values = { outputs = { release_contract = { contract_version = 1, release_version = "2026.07.1", bucket_name = "tfpro-c40-release-artifacts", region = "us-east-1", artifacts = { api = { key = "releases/api/current.txt", sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, worker = { key = "releases/worker/current.txt", sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } } } }
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { runtime_catalog_path = "../../fixtures/runtime-invalid-instance-type.json" }
+  expect_failures = [output.catalog_guard]
 }

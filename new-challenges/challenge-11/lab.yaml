@@ -1,16 +1,23 @@
 id: challenge-11
-title: LocalStack 多区域 Provider Alias 与模块契约诊断
+title: LocalStack 双区域 Provider Alias 与可验证路由
 objectives:
   - 1a
+  - 1b
+  - 1c
+  - 1d
   - 2a
   - 2b
-  - 2c
-  - 3a
-  - 3b
+  - 2e
+  - 4a
+  - 4b
+  - 5b
+  - 5c
+  - 5d
 difficulty: expert
-score_vs_tf_pro: 89
-timebox_minutes: 75
-runtime: localstack-and-mock
+score_vs_tf_pro: 95
+alignment: A
+timebox_minutes: 70
+runtime: localstack
 terraform_version: "~> 1.6"
 destructive: false
 prerequisites:
@@ -20,4 +27,6 @@ invariants:
   - only_localstack_test_credentials
   - child_declares_both_configuration_aliases
   - primary_and_recovery_mappings_are_not_swapped
-  - two_regions_and_accounts_are_observable
+  - saved_plan_apply_and_destroy_are_audited
+  - bucket_locations_prove_provider_routing
+  - zero_localstack_residue

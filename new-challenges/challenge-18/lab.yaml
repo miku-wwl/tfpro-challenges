@@ -1,27 +1,17 @@
 id: challenge-18
-title: Multi-stack dual-region platform capstone
+title: Dual-region dual-S3-state provider-branch capstone
 difficulty: expert
-score_vs_tf_pro: 96
-timebox_minutes: 120
-runtime: localstack-and-mock
-objectives:
-  - 1e
-  - 2a
-  - 2c
-  - 2d
-  - 2e
-  - 3b
-  - 3c
-  - 3d
-  - 4a
-  - 4b
-  - 4d
-  - 5b
-  - 5c
-  - 5d
+score_vs_tf_pro: 97
+alignment: A
+timebox_minutes: 110
+terraform_version: "~> 1.6"
+runtime: localstack
+objectives: [1a, 1b, 1c, 1d, 1e, 2a, 2b, 2c, 2d, 2e, 3b, 3c, 3d, 4a, 4b, 5b, 5c, 5d]
+services: [s3, sts]
 invariants:
-  - split_state_contract
-  - stable_service_identity
-  - explicit_provider_mapping
-  - deterministic_outputs
-  - only_localstack_test_credentials
+  - foundation_and_workload_have_distinct_s3_state
+  - only_remote_state_output_crosses_root_boundary
+  - static_provider_branches_route_primary_and_dr
+  - csv_reorder_preserves_service_at_location_identity
+  - workload_first_saved_destroy
+  - zero_s3_residue

@@ -1,23 +1,21 @@
 id: challenge-12
-title: Split state, migrate a backend, and orchestrate dependencies
-objectives:
-  - infrastructure_as_code_concepts
-  - terraform_configuration
-  - terraform_state
-  - terraform_workflow
-difficulty: advanced
-difficulty_score: 90
-score_vs_tf_pro: 90
-timebox_minutes: 80
-runtime: local
+title: S3 backend migration and cross-state release contract
+objectives: [1a, 1b, 1c, 1d, 1e, 2a, 2c, 2d, 2e, 3b, 3c, 3d, 5b, 5c, 5d]
+difficulty: expert
+difficulty_score: 96
+score_vs_tf_pro: 96
+alignment: A
+timebox_minutes: 85
+runtime: localstack
 terraform_version: "~> 1.6"
-services: []
+services: [s3, sts]
 destructive: false
 invariants:
   - producer_and_consumer_own_distinct_state
   - legacy_state_is_migrated_without_recreation
   - remote_state_exports_a_small_stable_contract
-  - automation_runs_producer_before_consumer
-  - automation_is_non_interactive_and_uses_saved_plans
+  - producer_state_moves_between_s3_keys_without_recreation
+  - consumer_reads_only_the_s3_remote_state_contract
+  - grader_applies_audited_saved_plans
   - repeated_plans_are_empty
-  - no_credentials_or_real_cloud_resources
+  - reverse_order_destroy_and_zero_residue

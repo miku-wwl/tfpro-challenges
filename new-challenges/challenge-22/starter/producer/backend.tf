@@ -1,6 +1,2 @@
-# Legacy backend。TODO: 改成部分配置的 backend "s3" {} 后执行 init -migrate-state。
-terraform {
-  backend "local" {
-    path = "legacy-producer.tfstate"
-  }
-}
+# TODO 22-P1: declare an empty partial S3 backend.
+terraform {}

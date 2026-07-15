@@ -1,14 +1,24 @@
 id: challenge-29
-title: 双区域嵌套模块数据与事件复制
-score: 97
-timebox: 120m
+title: 双区域嵌套模块制品与 IAM 合同
+score: 96
+alignment: A
+timebox: 85m
 runtime: localstack
 terraform_version: "~> 1.6"
-services: [s3, sns, dynamodb, sts]
-objectives: [2a, 2c, 2d, 2e, 3a, 4a, 4b, 4d, 5b, 5d]
+services:
+  - s3
+  - iam
+  - sts
+objectives:
+  - "1b/1c/1e: 审计 saved plan 并精确修复 IAM attachment 漂移"
+  - "2a/2b/2c/2d/2e: 将 CSV 编译为稳定的 S3/IAM for_each graph"
+  - "4a/4b: 创建 root 到 replication 到 regional 的两层 module graph"
+  - "5b/5d: 在每个 module 边界声明并排错 primary/dr provider aliases"
 invariants:
+  - managed_aws_types_are_only_public_exam_list_types
+  - no_dynamodb_sns_aws_region_or_terraform_data
   - nested_provider_aliases_are_explicit
-  - primary_and_dr_regions_are_distinct
-  - csv_order_does_not_change_addresses
-  - dr_consumes_primary_topic_contract
-  - repeated_plan_is_empty
+  - csv_reorder_preserves_all_addresses
+  - dr_consumes_primary_bucket_contract_by_service_key
+  - terraform_1_6_tests_use_no_mock_or_override
+  - saved_destroy_leaves_zero_localstack_residue

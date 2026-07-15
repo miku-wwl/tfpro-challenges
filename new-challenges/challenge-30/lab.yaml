@@ -1,13 +1,13 @@
 id: challenge-30
-title: 三层 State 双区域发布与恢复演练
-score: 98
-timebox: 150m
+title: 三 State 官方 AWS 发布链
+score: 96
+alignment: A
+exam_timebox: 75m
+study_timebox: 135m
 runtime: localstack
 services:
-  - ec2
   - s3
-  - sns
-  - dynamodb
+  - iam
   - sts
 concepts:
   - localstack
@@ -20,13 +20,14 @@ concepts:
   - cross-state-contracts
   - idempotent-delivery
 objectives:
-  - Publish versioned contracts across three independent Terraform states
-  - Route primary and DR resources through explicit provider aliases
-  - Expand a CSV catalog into stable regional module instances
-  - Enforce upstream contract versions and regional consistency
-  - Prove ordered apply, clean repeated plans, and reverse destroy
+  - Publish versioned IAM and dual-region S3 contracts across three independent states
+  - Route primary and DR S3 objects through explicit provider aliases and a child module
+  - Expand a CSV catalog into stable name@location object identities
+  - Enforce upstream versions, regions, ownership, and run identity
+  - Prove ordered saved-plan apply, reorder stability, drift repair, and reverse destroy
 invariants:
   - Cross-root dependencies use terraform_remote_state outputs only
+  - Every AWS managed and data block uses a resource type from the public Professional list
   - Workload identity is the unique name@location business key
   - Every AWS request uses loopback LocalStack and test credentials
   - Foundation, platform, and workloads each own a separate state

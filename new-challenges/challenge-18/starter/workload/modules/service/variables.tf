@@ -1,24 +1,7 @@
-variable "deployment_key" {
-  type = string
-}
-
+variable "bucket_name" { type = string }
+variable "environment" { type = string }
+variable "location" { type = string }
+variable "platform_schema_version" { type = number }
 variable "service" {
-  type = object({
-    name        = string
-    owner       = string
-    environment = string
-    port        = number
-    enabled     = bool
-    location    = string
-    tier        = string
-  })
+  type = object({ name = string, owner = string, tier = string, port = number })
 }
-
-variable "network" {
-  type = object({
-    vpc_id    = string
-    subnet_id = string
-    region    = string
-  })
-}
-

@@ -1,21 +1,22 @@
 id: challenge-37
-title: EC2 Security Group 规则编译器
+title: 官方 AWS Security Group Rule 编译与漂移修复
 score: 95
-timebox: 65m
-study_time: 110m
+alignment: A
+exam_timebox: 65m
+study_timebox: 110m
 runtime:
   terraform: "~> 1.6"
   provider: "hashicorp/aws ~> 5.100.0"
   target: localstack
   services: [ec2, sts]
 objectives:
-  - Normalize a weakly typed CSV into a deterministic security-rule model
-  - Compile ingress and egress rules into standalone AWS resources
-  - Detect duplicate identities, duplicate tuples, range overlap, and invalid protocol boundaries
+  - Normalize a weakly typed ingress CSV into a deterministic security-rule model
+  - Query a grader-owned subnet and compile rules into aws_vpc_security_group_ingress_rule
+  - Detect duplicate identities, duplicate tuples, and invalid protocol or port boundaries
   - Audit plan JSON and repair an out-of-band remote rule deletion
 invariants:
-  - rule_id and the normalized direction/protocol/port/CIDR tuple are independently unique
-  - enabled ranges for the same direction, protocol, and CIDR never overlap
+  - rule_id and the normalized protocol/port/CIDR tuple are independently unique
   - CSV row order never changes rule resource addresses
-  - every managed VPC, security group, and rule carries the exact grader RunId
+  - the candidate never manages VPC or subnet resources
+  - the managed security group carries the exact grader RunId
   - all AWS traffic is restricted to a loopback LocalStack endpoint with literal test credentials

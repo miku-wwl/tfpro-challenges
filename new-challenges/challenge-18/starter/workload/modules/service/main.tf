@@ -1,20 +1,16 @@
-resource "aws_security_group" "service" {
-  name   = "tfpro-${replace(var.deployment_key, "@", "-")}"
-  vpc_id = var.network.vpc_id
+resource "aws_s3_object" "service" {
+  bucket       = var.bucket_name
+  key          = "services/${var.environment}/${var.service.name}.json"
+  content      = jsonencode(var.service)
+  content_type = "application/json"
+  etag         = md5(jsonencode(var.service))
+  metadata     = { owner = var.service.owner, tier = var.service.tier, location = var.location }
+  tags         = { ManagedBy = "terraform", Service = var.service.name, Owner = var.service.owner, Location = var.location }
 
-  tags = {
-    Service = var.service.name
-    Owner   = var.service.owner
-    Tier    = var.service.tier
-    Region  = var.network.region
+  lifecycle {
+    precondition {
+      condition     = var.platform_schema_version == 1
+      error_message = "The workload requires platform contract schema version 1."
+    }
   }
 }
-
-resource "aws_vpc_security_group_ingress_rule" "service" {
-  security_group_id = aws_security_group.service.id
-  cidr_ipv4         = "10.0.0.0/8"
-  from_port         = var.service.port
-  to_port           = var.service.port
-  ip_protocol       = "tcp"
-}
-

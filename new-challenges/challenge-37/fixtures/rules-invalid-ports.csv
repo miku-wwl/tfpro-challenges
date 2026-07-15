@@ -1,2 +1,2 @@
-rule_id,direction,protocol,from_port,to_port,cidr,description,enabled
-bad-range,ingress,tcp,9000,8000,10.10.0.0/16,bad range,true
+rule_id,protocol,from_port,to_port,cidr,description,enabled
+bad-range,tcp,9000,8000,10.10.0.0/16,bad range,true

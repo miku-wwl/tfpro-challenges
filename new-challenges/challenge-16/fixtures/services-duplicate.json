@@ -1,0 +1,4 @@
+[
+  { "name": "api", "owner": "platform", "tier": "critical", "enabled": true },
+  { "name": "api", "owner": "data", "tier": "standard", "enabled": true }
+]

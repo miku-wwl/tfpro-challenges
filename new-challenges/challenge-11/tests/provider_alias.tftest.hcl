@@ -1,66 +1,56 @@
-mock_provider "aws" {
-  alias = "mock_primary"
-
-  mock_data "aws_region" {
-    defaults = {
-      name = "us-east-1"
-    }
-  }
-
-  mock_data "aws_caller_identity" {
-    defaults = {
-      account_id = "111111111111"
-      arn        = "arn:aws:iam::111111111111:role/TerraformPrimary"
-      user_id    = "AROAPRIMARY:terraform-test"
-    }
-  }
-}
-
-mock_provider "aws" {
-  alias = "mock_recovery"
-
-  mock_data "aws_region" {
-    defaults = {
-      name = "us-west-2"
-    }
-  }
-
-  mock_data "aws_caller_identity" {
-    defaults = {
-      account_id = "222222222222"
-      arn        = "arn:aws:iam::222222222222:role/TerraformRecoveryReadWrite"
-      user_id    = "AROARECOVERY:terraform-test"
-    }
-  }
-}
-
-run "provider_slots_are_explicit" {
+run "provider_alias_contract" {
   command = plan
 
-  providers = {
-    aws          = aws.mock_primary
-    aws.recovery = aws.mock_recovery
+  assert {
+    condition     = output.provider_regions == { primary = "us-east-1", recovery = "us-west-2" }
+    error_message = "The two provider regions must remain distinct and deterministic."
   }
 
   assert {
-    condition = output.provider_regions == {
-      primary  = "us-east-1"
-      recovery = "us-west-2"
-    }
-    error_message = "primary/recovery provider region 被继承或交换。"
-  }
-
-  assert {
-    condition = output.caller_accounts == {
-      primary  = "111111111111"
-      recovery = "222222222222"
-    }
-    error_message = "两个 provider slot 必须使用不同的 caller identity。"
-  }
-
-  assert {
-    condition     = output.bucket_names.primary == "tfpro-alias-primary" && output.bucket_names.recovery == "tfpro-alias-recovery"
-    error_message = "bucket naming contract 不正确。"
+    condition     = output.bucket_names.primary == "tfpro-c11-primary" && output.bucket_names.recovery == "tfpro-c11-recovery"
+    error_message = "Bucket names must identify the provider slot."
   }
 }
 
+run "custom_prefix_is_propagated" {
+  command = plan
+
+  variables {
+    name_prefix = "c11-contract"
+  }
+
+  assert {
+    condition     = output.bucket_names.primary == "c11-contract-primary" && output.bucket_names.recovery == "c11-contract-recovery"
+    error_message = "The child module must consume the caller prefix."
+  }
+}
+
+run "same_region_is_rejected" {
+  command = plan
+
+  variables {
+    recovery_region = "us-east-1"
+  }
+
+  expect_failures = [check.regions_differ]
+}
+
+run "invalid_prefix_is_rejected" {
+  command = plan
+
+  variables {
+    name_prefix = "Bad_Prefix"
+  }
+
+  expect_failures = [var.name_prefix]
+}
+
+run "non_loopback_endpoint_is_rejected" {
+  command = plan
+
+  variables {
+    localstack_endpoint = "https://s3.amazonaws.com:443"
+  }
+
+  expect_failures = [var.localstack_endpoint]
+}

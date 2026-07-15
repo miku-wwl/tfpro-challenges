@@ -1,48 +1,37 @@
-# Challenge 12：拆分配置、迁移 State 与自动化顺序
+# Challenge 12：S3 Backend 迁移与跨 State 发布合同
 
-## 场景
+难度：**96 / 100**；考纲契合度：**A**；考试模式 **85 分钟**，首次完整学习 **130 分钟**。
 
-一个单体基础设施配置已经拆成 `producer`（网络契约）和 `consumer`（应用清单）两个 root module。旧 producer state 仍在 legacy 路径。你需要把它迁移到集中式 local backend，并让 consumer 只通过 `terraform_remote_state` 使用 producer 的稳定输出。
+producer 与 consumer 是两个独立 root。producer 从 legacy S3 state key 迁移到 centralized key，
+consumer 再通过 `terraform_remote_state` 的 S3 backend 读取一个最小发布合同。两边都在 LocalStack
+创建真实 S3 workload；候选任务只修改 `starter/` 中的 Terraform HCL，不编写部署脚本。
 
-本题用本地 backend 和 `terraform_data` 完整模拟生产流程；不会连接 AWS，也不需要凭证。
+## Terraform 任务
 
-## 任务
-
-只修改 `starter/`：
-
-1. 为两个 root 声明 `backend "local" {}`，且不要把运行时绝对路径写死在 HCL 中。
-2. producer 输出最小、稳定的 `network_contract`；不要向 consumer 暴露整个资源对象。
-3. consumer 用 `data "terraform_remote_state"` 读取 grader 传入的 producer state 路径，并消费契约。
-4. 修复资源身份，使 CSV 行顺序或显示名变化不会改变 producer/consumer 的 state 地址。
-5. 完成 `automation/deploy.ps1`：按 producer → consumer 执行 `init`、保存 plan、apply 保存的 plan；所有命令必须非交互。
-6. 演示从 legacy local backend 到 centralized local backend 的迁移，不能重建 producer 对象，也不能复制 JSON state 文件冒充迁移。
-7. 最终两个 root 的重复 plan 必须为零变更。
+1. 两个 root 都声明 partial `backend "s3" {}`；backend bucket/key/endpoint 由 grader 在 `init` 时注入。
+2. producer 规范化 CSV，只选择目标环境且 enabled 的服务，并用 service name 作为稳定 `for_each` key。
+3. producer 创建一个 release bucket 和每服务一个对象，发布只含 schema、environment、bucket 与 object-key map 的 `release_contract`。
+4. consumer 通过 S3 `terraform_remote_state` 读取该 output，不复制 state JSON、不依赖 producer 资源地址。
+5. consumer 创建一个 receipt bucket 和稳定的 receipt 对象；precondition 必须固定 contract schema v1。
+6. provider 与 remote-state backend 仅使用 LocalStack `test/test`、loopback endpoint、path-style 与 skip flags。
+7. 输入重排不得改变地址；最终两个 root 均 clean plan，销毁顺序必须 consumer → producer。
 
 ## 验收
 
-在仓库根目录运行：
-
 ```powershell
-pwsh -NoProfile -File tmp2/challenge-12/tests/grade.ps1 -Candidate tmp2/challenge-12/starter
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/grade.ps1
 ```
 
-grader 会在系统临时目录创建独立工作副本和 backend，执行真实的 `init/apply/init -migrate-state`，不会污染 `starter/`。迁移后它会加入一个新服务；只有 producer 先 apply，consumer 才能读取到新契约，因此部署顺序也会被行为验证。
+grader 会先执行 **5 个 Terraform 1.6.6 兼容的普通 plan tests**，不使用 mock/override；随后在
+LocalStack 创建独立 backend bucket，真实执行 legacy-key apply、`init -migrate-state`、producer saved
+plan、consumer saved plan、S3 payload 与 state ownership 检查、双 clean plan、逆序 saved destroy，最后
+删除 backend state 并检查 S3 零残留。CLI orchestration 属于 grader，不是候选答题面。
 
-## 不变量
+## 考纲映射
 
-- producer 与 consumer 使用不同 state 文件，各自只拥有自己的资源。
-- 迁移前后 producer 的资源 ID 和 state 地址保持不变。
-- consumer 只能读取 `network_contract`，不能依赖 producer 内部资源地址。
-- 部署顺序是 producer → consumer；销毁顺序应反向进行。
-- 自动化使用 `-input=false`、保存 plan，并 apply 同一个 plan 文件。
-- state 路径由 backend config/变量注入，代码中没有机器相关绝对路径。
+- **1a–1e**：init backend、saved plan/apply、逆序 destroy、state migration 与 clean plan；
+- **2a / 2c / 2d / 2e**：checks、CSV 转换、稳定 `for_each` 与复杂 output；
+- **3b / 3c / 3d**：S3 remote state、非交互 workflow、跨配置合同；
+- **5b / 5c / 5d**：AWS provider、LocalStack 凭证、endpoint 与 backend 排障。
 
-## 安全边界
-
-- 禁止加入 AWS provider、真实 backend、访问密钥或网络 provisioner。
-- local state 可能包含敏感数据；本题数据均为虚构值，临时 state 在验收结束后删除。
-- 不要手工编辑或直接复制 state；只能通过 Terraform backend migration 完成迁移。
-
-## Terraform Professional objective
-
-覆盖 Professional 大纲中的 state/backend 操作、配置拆分、跨配置数据共享、非交互式 workflow、plan/apply 一致性，以及安全的变更顺序与故障恢复。
+AWS workload 只使用公开考试资源清单中的 `aws_s3_bucket`、`aws_s3_object` 和 S3 backend。

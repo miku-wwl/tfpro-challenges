@@ -1,5 +1,6 @@
-output "deployment_manifest" {
+output "receipt_contract" {
   value = {
-    for name, resource in terraform_data.application : name => resource.output
+    bucket_name = aws_s3_bucket.receipts.bucket
+    object_keys = { for name, object in aws_s3_object.receipt : name => object.key }
   }
 }

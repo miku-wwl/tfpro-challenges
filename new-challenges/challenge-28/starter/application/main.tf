@@ -1,48 +1,22 @@
-data "terraform_remote_state" "network" {
-  backend = "local"
-  config  = { path = var.network_state_path }
+data "terraform_remote_state" "foundation" {
+  backend = "s3"
+
+  # TODO: complete the Terraform 1.6 LocalStack S3 remote-state config.
+  config = {
+    bucket = var.state_bucket
+    key    = var.foundation_state_key
+    region = var.primary_region
+  }
 }
 
 locals {
-  rows = csvdecode(file("${path.module}/${var.catalog_file}"))
-  applications = [for row in local.rows : {
-    name        = trimspace(row.name)
-    owner       = trimspace(row.owner)
-    environment = trimspace(row.environment)
-    port        = tonumber(row.port)
-    enabled     = tobool(row.enabled)
-    location    = trimspace(row.location)
-  }]
+  platform_contract = data.terraform_remote_state.foundation.outputs.platform_contract
+  rows              = csvdecode(file("${path.module}/${var.catalog_file}"))
 
-  # TODO: Filter enabled rows, expand both, and key by application@location.
-  selected = { for index, app in local.applications : tostring(index) => app if app.environment == var.target_environment }
-  primary  = local.selected
-  dr       = {}
+  # TODO: normalize/filter/expand location=both into application@location stable keys.
+  deployments         = {}
+  primary_deployments = {}
+  dr_deployments      = {}
 }
 
-resource "terraform_data" "contract_guard" {
-  input = sha256(file("${path.module}/${var.catalog_file}"))
-
-  lifecycle {
-    # TODO: Reject invalid locations, duplicate expanded keys, incompatible
-    # network contract versions, and provider/contract region mismatches.
-    precondition {
-      condition     = length(local.applications) >= 0
-      error_message = "Complete the catalog and upstream contract guard."
-    }
-  }
-}
-
-module "application_primary" {
-  for_each = local.primary
-  source   = "./modules/application"
-  providers = {
-    aws = aws
-  }
-  run_id         = var.run_id
-  deployment_key = each.key
-  application    = each.value
-  network        = data.terraform_remote_state.network.outputs.network_contract.primary
-}
-
-# TODO: Add a static DR module block mapped to aws.dr.
+# TODO: call two static application modules and route aws.primary/aws.dr explicitly.

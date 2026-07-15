@@ -1,24 +1,26 @@
-resource "aws_vpc" "primary" {
-  cidr_block = "10.10.0.0/16"
-  tags       = { Name = "tfpro-primary" }
+module "primary" {
+  source = "./modules/regional-bucket"
+
+  # TODO 1: explicitly map aws.primary into the child default aws slot.
+  providers = { aws = aws.dr }
+  role      = "primary"
+  region    = var.primary_region
+  bucket    = "${var.name_prefix}-primary"
 }
 
-# TODO: This recovery VPC is accidentally using the default provider.
-resource "aws_vpc" "dr" {
-  cidr_block = "10.20.0.0/16"
-  tags       = { Name = "tfpro-dr" }
+module "dr" {
+  source = "./modules/regional-bucket"
+
+  # TODO 2: explicitly map aws.dr into the child default aws slot.
+  providers = { aws = aws.primary }
+  role      = "dr"
+  region    = var.dr_region
+  bucket    = "${var.name_prefix}-dr"
 }
 
-resource "aws_subnet" "primary" {
-  vpc_id     = aws_vpc.primary.id
-  cidr_block = "10.10.1.0/24"
-  tags       = { Name = "tfpro-primary-app" }
+check "regions_differ" {
+  assert {
+    condition     = var.primary_region != var.dr_region
+    error_message = "primary_region and dr_region must differ."
+  }
 }
-
-# TODO: Keep the DR subnet in the same provider graph as the DR VPC.
-resource "aws_subnet" "dr" {
-  vpc_id     = aws_vpc.dr.id
-  cidr_block = "10.20.1.0/24"
-  tags       = { Name = "tfpro-dr-app" }
-}
-

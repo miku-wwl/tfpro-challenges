@@ -9,8 +9,11 @@ variable "localstack_endpoint" {
   description = "LocalStack edge endpoint"
   default     = "http://localhost:4566"
   validation {
-    condition     = can(regex("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]{1,5})?/?\\z", var.localstack_endpoint))
-    error_message = "localstack_endpoint 必须是 loopback HTTP(S) 根地址。"
+    condition = (
+      can(regex("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\]):([1-9][0-9]{0,4})\\z", var.localstack_endpoint)) &&
+      try(tonumber(regex("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\]):([1-9][0-9]{0,4})\\z", var.localstack_endpoint)[1]) <= 65535, false)
+    )
+    error_message = "localstack_endpoint 必须是带显式有效端口的 loopback HTTP(S) 根地址。"
   }
 }
 
@@ -30,13 +33,13 @@ variable "run_id" {
   default     = "manual-c37"
 }
 
-variable "vpc_cidr" {
+variable "subnet_id" {
   type        = string
-  description = "规则 VPC CIDR"
-  default     = "10.137.0.0/16"
+  description = "grader 预置且不属于候选 state 的 subnet ID"
+  default     = "subnet-replace-me"
   validation {
-    condition     = can(cidrnetmask(var.vpc_cidr))
-    error_message = "vpc_cidr 必须是有效 IPv4 CIDR。"
+    condition     = can(regex("^subnet-[0-9a-z]+$", var.subnet_id))
+    error_message = "subnet_id 格式非法。"
   }
 }
 

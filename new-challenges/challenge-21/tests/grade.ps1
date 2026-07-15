@@ -1,343 +1,271 @@
 [CmdletBinding()]
 param(
-  [string]$Candidate = (Join-Path $PSScriptRoot "../starter"),
-  [string]$LocalStackEndpoint = "http://localhost:4566"
+    [string]$Candidate = (Join-Path $PSScriptRoot "../starter"),
+    [string]$LocalstackEndpoint = "http://localhost:4566",
+    [switch]$UnitOnly
 )
 
-Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$PSNativeCommandUseErrorActionPreference = $false
-
-$challengeRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$candidatePath = (Resolve-Path $Candidate).Path
-$script:checks = 0
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("tfpro-c21-" + [guid]::NewGuid().ToString("N"))
-$namePrefix = "tfpro-c21-" + ([guid]::NewGuid().ToString("N").Substring(0, 8))
-$runId = "c21-" + ([guid]::NewGuid().ToString("N").Substring(0, 16))
-$candidateDirectory = $null
 
 function Assert-LoopbackEndpoint {
-  param([string]$Endpoint)
-  $uri = $null
-  if (-not [uri]::TryCreate($Endpoint, [System.UriKind]::Absolute, [ref]$uri)) {
-    throw "LocalStackEndpoint must be an absolute URI"
-  }
-  $endpointHost = $uri.Host.Trim('[', ']').ToLowerInvariant()
-  if ($uri.Scheme -notin @("http", "https") -or
-    $endpointHost -notin @("localhost", "127.0.0.1", "::1") -or
-    -not [string]::IsNullOrEmpty($uri.UserInfo) -or
-    $uri.AbsolutePath -ne "/" -or
-    -not [string]::IsNullOrEmpty($uri.Query) -or
-    -not [string]::IsNullOrEmpty($uri.Fragment)) {
-    throw "LocalStackEndpoint must be an HTTP(S) loopback root URL"
-  }
+    param([string]$Endpoint)
+    $uri = $null
+    if (-not [uri]::TryCreate($Endpoint, [UriKind]::Absolute, [ref]$uri)) {
+        throw "LocalstackEndpoint must be an absolute URI."
+    }
+    $hostName = $uri.Host.Trim("[", "]").ToLowerInvariant()
+    if ($uri.Scheme -notin @("http", "https") -or
+        $hostName -notin @("localhost", "127.0.0.1", "::1") -or
+        $uri.IsDefaultPort -or $uri.UserInfo -or $uri.AbsolutePath -ne "/" -or $uri.Query -or $uri.Fragment) {
+        throw "LocalstackEndpoint must be a loopback root origin with an explicit port."
+    }
 }
 
-function Remove-HclComments {
-  param([string]$Text)
-  $builder = [Text.StringBuilder]::new($Text.Length)
-  $state = "code"
-  for ($i = 0; $i -lt $Text.Length; $i++) {
-    $current = $Text[$i]
-    $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
-    if ($state -eq "code") {
-      if ($current -eq '"') { [void]$builder.Append($current); $state = "string" }
-      elseif ($current -eq '#') { [void]$builder.Append(' '); $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "line" }
-      elseif ($current -eq '/' -and $next -eq '*') { [void]$builder.Append("  "); $i++; $state = "block" }
-      else { [void]$builder.Append($current) }
+Assert-LoopbackEndpoint $LocalstackEndpoint
+
+function Invoke-Native {
+    param([string]$File, [string[]]$Arguments, [int[]]$AllowedExitCodes = @(0))
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $lines = @(& $File @Arguments 2>&1)
+        $code = $LASTEXITCODE
     }
-    elseif ($state -eq "string") {
-      [void]$builder.Append($current)
-      if ($current -eq '\' -and $i + 1 -lt $Text.Length) { $i++; [void]$builder.Append($Text[$i]) }
-      elseif ($current -eq '"') { $state = "code" }
+    finally {
+        $ErrorActionPreference = $previousPreference
     }
-    elseif ($state -eq "line") {
-      if ($current -eq "`n") { [void]$builder.Append($current); $state = "code" }
-      else { [void]$builder.Append(' ') }
+    $text = $lines -join [Environment]::NewLine
+    if ($code -notin $AllowedExitCodes) {
+        throw "$File $($Arguments -join ' ') failed with exit $code.$([Environment]::NewLine)$text"
     }
-    else {
-      if ($current -eq '*' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "code" }
-      elseif ($current -eq "`n") { [void]$builder.Append($current) }
-      else { [void]$builder.Append(' ') }
-    }
-  }
-  return $builder.ToString()
+    return [pscustomobject]@{ ExitCode = $code; Text = $text }
 }
 
-function Get-HclBlocks {
-  param([string]$Text, [string]$HeaderPattern)
-  $blocks = [Collections.Generic.List[string]]::new()
-  foreach ($match in [regex]::Matches($Text, $HeaderPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-    $open = $Text.IndexOf('{', $match.Index)
-    if ($open -lt 0) { continue }
-    $depth = 0
-    $inString = $false
-    for ($i = $open; $i -lt $Text.Length; $i++) {
-      $current = $Text[$i]
-      if ($inString) {
-        if ($current -eq '\') { $i++; continue }
-        if ($current -eq '"') { $inString = $false }
-        continue
-      }
-      if ($current -eq '"') { $inString = $true; continue }
-      if ($current -eq '{') { $depth++ }
-      elseif ($current -eq '}') {
-        $depth--
-        if ($depth -eq 0) {
-          $blocks.Add($Text.Substring($match.Index, $i - $match.Index + 1))
-          break
+function Invoke-Aws {
+    param([string[]]$Arguments, [int[]]$AllowedExitCodes = @(0))
+    return Invoke-Native "aws" (@("--endpoint-url", $LocalstackEndpoint) + $Arguments + @("--no-cli-pager")) $AllowedExitCodes
+}
+
+function Copy-CleanTree {
+    param([string]$Source, [string]$Destination)
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($item.Name -in @(".terraform", ".terraform.lock.hcl", "terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info") -or
+            $item.Extension -eq ".tfplan") {
+            continue
         }
-      }
+        $target = Join-Path $Destination $item.Name
+        if ($item.PSIsContainer) { Copy-CleanTree $item.FullName $target }
+        else { Copy-Item -LiteralPath $item.FullName -Destination $target -Force }
     }
-  }
-  return @($blocks)
 }
 
-Assert-LoopbackEndpoint $LocalStackEndpoint
-
-function Assert-True {
-  param([bool]$Condition, [string]$Message)
-  if (-not $Condition) { throw "ASSERTION FAILED: $Message" }
-  $script:checks++
-  Write-Host "[PASS] $Message" -ForegroundColor Green
+function Get-PlanChanges {
+    param([string]$WorkRoot, [string]$PlanPath)
+    $shown = Invoke-Native "terraform" @("-chdir=$WorkRoot", "show", "-json", $PlanPath)
+    $json = $shown.Text | ConvertFrom-Json
+    if ($null -eq $json.resource_changes) { return @() }
+    return @($json.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
 }
 
-function Invoke-Terraform {
-  param([string]$Directory, [string[]]$Arguments)
-  Push-Location $Directory
-  try {
-    & terraform @Arguments | Out-Host
-    $code = $LASTEXITCODE
-  }
-  finally { Pop-Location }
-  if ($code -ne 0) { throw "terraform $($Arguments -join ' ') failed with exit code $code" }
+function New-NetworkFixture {
+    param([string]$RunId)
+    $tag = "ResourceType=vpc,Tags=[{Key=Challenge,Value=21},{Key=RunId,Value=$RunId}]"
+    $vpcJson = (Invoke-Aws @("ec2", "create-vpc", "--cidr-block", "10.42.0.0/16", "--tag-specifications", $tag, "--output", "json")).Text | ConvertFrom-Json
+    $vpcId = [string]$vpcJson.Vpc.VpcId
+
+    $definitions = [ordered]@{
+        "public-a"  = @{ Cidr = "10.42.10.0/24"; Az = "us-east-1a" }
+        "private-a" = @{ Cidr = "10.42.20.0/24"; Az = "us-east-1b" }
+        "data-a"    = @{ Cidr = "10.42.30.0/24"; Az = "us-east-1c" }
+    }
+    $subnets = [ordered]@{}
+    foreach ($key in $definitions.Keys) {
+        $subnetTag = "ResourceType=subnet,Tags=[{Key=Challenge,Value=21},{Key=RunId,Value=$RunId},{Key=LogicalKey,Value=$key}]"
+        $result = (Invoke-Aws @("ec2", "create-subnet", "--vpc-id", $vpcId, "--cidr-block", $definitions[$key].Cidr,
+            "--availability-zone", $definitions[$key].Az, "--tag-specifications", $subnetTag, "--output", "json")).Text | ConvertFrom-Json
+        $subnets[$key] = [string]$result.Subnet.SubnetId
+    }
+    return [pscustomobject]@{ VpcId = $vpcId; Subnets = $subnets }
 }
 
-function Invoke-TerraformCapture {
-  param([string]$Directory, [string[]]$Arguments)
-  Push-Location $Directory
-  try {
-    $lines = @(& terraform @Arguments 2>&1 | ForEach-Object { $_.ToString() })
-    $code = $LASTEXITCODE
-  }
-  finally { Pop-Location }
-  $captured = $lines -join "`n"
-  Write-Host $captured
-  if ($code -ne 0) { throw "terraform $($Arguments -join ' ') failed with exit code $code" }
-  return $captured
+function Remove-NetworkFixture {
+    param($Fixture)
+    if ($null -eq $Fixture) { return }
+    foreach ($subnetId in @($Fixture.Subnets.Values)) {
+        Invoke-Aws @("ec2", "delete-subnet", "--subnet-id", $subnetId) @(0, 255) | Out-Null
+    }
+    Invoke-Aws @("ec2", "delete-vpc", "--vpc-id", $Fixture.VpcId) @(0, 255) | Out-Null
 }
 
-function Assert-PlanReportsCheck {
-  param([string]$Directory, [string[]]$Arguments, [string]$ExpectedMessage, [string]$Description)
-  Push-Location $Directory
-  try {
-    $lines = @(& terraform @Arguments 2>&1 | ForEach-Object { $_.ToString() })
-    $code = $LASTEXITCODE
-  }
-  finally { Pop-Location }
-  $captured = $lines -join "`n"
-  Assert-True ($code -eq 0 -and $captured.Contains($ExpectedMessage)) $Description
+$challengeRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$candidateRoot = (Resolve-Path -LiteralPath $Candidate).Path
+$fixtureRoot = Join-Path $challengeRoot "fixtures"
+
+if (@(Get-ChildItem -LiteralPath $candidateRoot -Recurse -File -Filter "*.ps1").Count -ne 0) {
+    throw "Candidate work must contain Terraform HCL only."
+}
+$tfFiles = @(Get-ChildItem -LiteralPath $candidateRoot -Recurse -File -Filter "*.tf")
+$allTf = ($tfFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join [Environment]::NewLine
+if ($allTf -match "(?i)\bTODO\b|not implemented|incomplete") {
+    throw "Candidate contains an unfinished marker."
+}
+if ($allTf -match 'resource\s+"aws_(vpc|subnet)"|data\s+"aws_vpc"|terraform_data') {
+    throw "Candidate must consume the existing network and cannot manage out-of-list VPC/subnet resources."
+}
+$resourceTypes = @([regex]::Matches($allTf, '(?m)^\s*resource\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+if (($resourceTypes -join "|") -cne "aws_security_group|aws_vpc_security_group_ingress_rule") {
+    throw "Managed types must be exactly security group and VPC ingress rule."
+}
+if (([regex]::Matches($allTf, 'data\s+"aws_subnet"\s+"managed"')).Count -ne 1) {
+    throw "Candidate must query existing subnets with the official aws_subnet data source."
+}
+foreach ($required in @('access_key\s*=\s*"test"', 'secret_key\s*=\s*"test"',
+        'skip_credentials_validation\s*=\s*true', 'skip_metadata_api_check\s*=\s*true',
+        'skip_requesting_account_id\s*=\s*true', 'ec2\s*=\s*var\.localstack_endpoint',
+        'sts\s*=\s*var\.localstack_endpoint')) {
+    if ($allTf -notmatch $required) { throw "Provider safety contract is incomplete." }
+}
+if ($allTf -match '(?m)^\s*(s3|iam|sns|dynamodb)\s*=\s*var\.localstack_endpoint') {
+    throw "Provider endpoints must be exactly ec2 and sts."
+}
+if ($allTf -notmatch 'precondition\s*\{' -or $allTf -notmatch 'for_each\s*=\s*local\.deployable_rules') {
+    throw "Stable graph and blocking contract preconditions are required."
 }
 
-function Assert-PlanRejected {
-  param([string]$Directory, [string[]]$Arguments, [string]$ExpectedMessage, [string]$Description)
-  Push-Location $Directory
-  try {
-    $lines = @(& terraform @Arguments 2>&1 | ForEach-Object { $_.ToString() })
-    $code = $LASTEXITCODE
-  }
-  finally { Pop-Location }
-  $captured = $lines -join "`n"
-  Assert-True ($code -ne 0 -and $captured.Contains($ExpectedMessage)) $Description
+$testFile = Join-Path $PSScriptRoot "contract.tftest.hcl"
+$testText = [IO.File]::ReadAllText($testFile)
+if ($testText -match "(?i)mock_provider|override_(resource|data|module)" -or
+    ([regex]::Matches($testText, '(?m)^run\s+"')).Count -ne 10) {
+    throw "Canonical suite must contain 10 Terraform 1.6 runs and no mocks or overrides."
 }
 
-function Invoke-AwsJson {
-  param([string[]]$Arguments)
-  $raw = (& aws --endpoint-url $LocalStackEndpoint @Arguments --output json --no-cli-pager 2>&1) -join "`n"
-  if ($LASTEXITCODE -ne 0) { throw "aws $($Arguments -join ' ') failed: $raw" }
-  return ($raw | ConvertFrom-Json)
+$health = Invoke-RestMethod -UseBasicParsing -Uri ($LocalstackEndpoint + "/_localstack/health") -Method Get
+foreach ($service in @("ec2", "sts")) {
+    if ($null -eq $health.services.$service -or [string]$health.services.$service -notmatch "available|running") {
+        throw "LocalStack service $service is unavailable."
+    }
 }
 
-function Get-RunResources {
-  $rules = @(Invoke-AwsJson @("ec2", "describe-security-group-rules", "--filters", "Name=tag:RunId,Values=$runId") | Select-Object -ExpandProperty SecurityGroupRules)
-  $groups = @(Invoke-AwsJson @("ec2", "describe-security-groups", "--filters", "Name=tag:RunId,Values=$runId") | Select-Object -ExpandProperty SecurityGroups)
-  $subnets = @(Invoke-AwsJson @("ec2", "describe-subnets", "--filters", "Name=tag:RunId,Values=$runId") | Select-Object -ExpandProperty Subnets)
-  $vpcs = @(Invoke-AwsJson @("ec2", "describe-vpcs", "--filters", "Name=tag:RunId,Values=$runId") | Select-Object -ExpandProperty Vpcs)
-  return [pscustomobject]@{
-    Rules   = $rules
-    Groups  = $groups
-    Subnets = $subnets
-    Vpcs    = $vpcs
-  }
+$tempBase = [IO.Path]::GetTempPath()
+$tempRoot = Join-Path $tempBase ("tfpro-c21-grade-" + [guid]::NewGuid().ToString("N"))
+$workRoot = Join-Path $tempRoot "candidate"
+$pluginCache = Join-Path $tempRoot "plugin-cache"
+$suffix = [guid]::NewGuid().ToString("N").Substring(0, 10)
+$runId = "c21-$suffix"
+$network = $null
+$terraformInitialized = $false
+$envBefore = @{}
+foreach ($name in @("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "AWS_EC2_METADATA_DISABLED", "TF_PLUGIN_CACHE_DIR")) {
+    $envBefore[$name] = [Environment]::GetEnvironmentVariable($name)
 }
-
-function Remove-RunResources {
-  $resources = Get-RunResources
-  foreach ($rule in $resources.Rules) {
-    & aws --endpoint-url $LocalStackEndpoint ec2 revoke-security-group-ingress --group-id $rule.GroupId --security-group-rule-ids $rule.SecurityGroupRuleId --no-cli-pager 2>$null | Out-Null
-  }
-  $resources = Get-RunResources
-  foreach ($group in $resources.Groups) {
-    & aws --endpoint-url $LocalStackEndpoint ec2 delete-security-group --group-id $group.GroupId --no-cli-pager 2>$null | Out-Null
-  }
-  $resources = Get-RunResources
-  foreach ($subnet in $resources.Subnets) {
-    & aws --endpoint-url $LocalStackEndpoint ec2 delete-subnet --subnet-id $subnet.SubnetId --no-cli-pager 2>$null | Out-Null
-  }
-  $resources = Get-RunResources
-  foreach ($vpc in $resources.Vpcs) {
-    & aws --endpoint-url $LocalStackEndpoint ec2 delete-vpc --vpc-id $vpc.VpcId --no-cli-pager 2>$null | Out-Null
-  }
-}
-
-function Invoke-DetailedPlan {
-  param([string]$Directory, [string[]]$Arguments)
-  Push-Location $Directory
-  try {
-    & terraform @Arguments | Out-Host
-    $code = $LASTEXITCODE
-  }
-  finally { Pop-Location }
-  if ($code -notin @(0, 2)) { throw "terraform plan failed with exit code $code" }
-  return $code
-}
-
-function Test-LocalStackServices {
-  $health = Invoke-RestMethod -Uri "$LocalStackEndpoint/_localstack/health" -TimeoutSec 5
-  foreach ($service in @("ec2", "sts")) {
-    $property = $health.services.PSObject.Properties[$service]
-    Assert-True ($null -ne $property -and $property.Value -in @("available", "running")) "LocalStack $service service is healthy"
-  }
-}
-
-function Assert-CandidateContract {
-  $files = @(Get-ChildItem -LiteralPath $candidatePath -Recurse -File -Filter "*.tf")
-  Assert-True ($files.Count -gt 0) "candidate contains Terraform configuration"
-  $configuration = Remove-HclComments (($files | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n")
-  $providerBlocks = @(Get-HclBlocks $configuration '(?m)^[ \t]*provider\s+"aws"\s*\{')
-  Assert-True ($providerBlocks.Count -eq 1) "candidate contains exactly one AWS provider block"
-  $providerBlock = $providerBlocks[0]
-  $providerAssignments = @{
-    access_key                  = '"test"'
-    secret_key                  = '"test"'
-    region                      = 'var\.aws_region'
-    skip_credentials_validation = 'true'
-    skip_metadata_api_check     = 'true'
-    skip_requesting_account_id  = 'true'
-    ec2                         = 'var\.localstack_endpoint'
-    sts                         = 'var\.localstack_endpoint'
-  }
-  foreach ($assignment in $providerAssignments.GetEnumerator()) {
-    $pattern = '(?m)^\s*' + [regex]::Escape($assignment.Key) + '\s*=\s*' + $assignment.Value + '\s*$'
-    Assert-True ([regex]::Matches($providerBlock, $pattern).Count -eq 1) "AWS provider sets $($assignment.Key) exactly and safely"
-  }
-  Assert-True ([regex]::Matches($configuration, '(?m)^\s*default\s*=\s*"http://localhost:4566"\s*$').Count -eq 1) "LocalStack endpoint defaults exactly to loopback edge"
-  Assert-True ($configuration -match 'rule\.environment\s*==\s*var\.environment\s*&&\s*rule\.enabled') "only enabled target-environment rules enter the graph"
-  Assert-True ($configuration -match 'rule\.rule_id\s*=>\s*rule') "rule_id is the stable for_each identity"
-  Assert-True ($configuration -match 'data\s+"aws_vpc"\s+"managed"' -and $configuration -match 'data\s+"aws_subnet"\s+"managed"' -and $configuration -match 'data\.aws_subnet\.managed\[each\.value\.subnet_key\]\.cidr_block') "rule CIDRs are resolved through VPC/subnet data sources"
-  foreach ($checkName in @("unique_rule_ids", "rule_subnets_exist", "valid_rule_ports", "consistent_group_owners")) {
-    Assert-True ($configuration -match "check\s+`"$checkName`"") "configuration defines $checkName check"
-  }
-  Assert-True ($configuration -match 'owners\s*=\s*sort' -and $configuration -match 'owner\s*=>\s*sort') "owner grouping and members are deterministically sorted"
-  Assert-True ($configuration -match 'RunId\s*=\s*var\.run_id') "all managed resource families carry the unique RunId cleanup tag"
-}
-
-New-Item -ItemType Directory -Path $tempRoot | Out-Null
-$oldAccessKey = $env:AWS_ACCESS_KEY_ID
-$oldSecretKey = $env:AWS_SECRET_ACCESS_KEY
-$oldRegion = $env:AWS_DEFAULT_REGION
-$env:AWS_ACCESS_KEY_ID = "test"
-$env:AWS_SECRET_ACCESS_KEY = "test"
-$env:AWS_DEFAULT_REGION = "us-east-1"
-$vpcId = $null
 
 try {
-  Assert-CandidateContract
-  Test-LocalStackServices
-  Copy-Item (Join-Path $challengeRoot "fixtures") (Join-Path $tempRoot "fixtures") -Recurse -Force
+    $env:AWS_ACCESS_KEY_ID = "test"
+    $env:AWS_SECRET_ACCESS_KEY = "test"
+    $env:AWS_DEFAULT_REGION = "us-east-1"
+    $env:AWS_EC2_METADATA_DISABLED = "true"
 
-  $candidateDirectory = Join-Path $tempRoot "candidate"
-  New-Item -ItemType Directory -Path $candidateDirectory | Out-Null
-  Copy-Item (Join-Path $candidatePath "*") $candidateDirectory -Recurse -Force
-  New-Item -ItemType Directory -Path (Join-Path $candidateDirectory "tests") -Force | Out-Null
-  Copy-Item (Join-Path $PSScriptRoot "contract.tftest.hcl") (Join-Path $candidateDirectory "tests/contract.tftest.hcl") -Force
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $pluginCache -Force | Out-Null
+    $env:TF_PLUGIN_CACHE_DIR = $pluginCache
+    Copy-CleanTree $candidateRoot $workRoot
+    Copy-CleanTree $fixtureRoot (Join-Path $tempRoot "fixtures")
+    New-Item -ItemType Directory -Path (Join-Path $workRoot "tests") -Force | Out-Null
+    Copy-Item -LiteralPath $testFile -Destination (Join-Path $workRoot "tests/contract.tftest.hcl") -Force
 
-  Invoke-Terraform $candidateDirectory @("init", "-backend=false", "-input=false")
-  $testOutput = Invoke-TerraformCapture $candidateDirectory @("test", "-no-color")
-  Assert-True ($testOutput -match '(?m)^Success! 4 passed, 0 failed\.$') "canonical mock test reports exactly 4/4 passed"
+    Invoke-Native "terraform" @("fmt", "-check", "-recursive", $workRoot) | Out-Null
+    Invoke-Native "terraform" @("-chdir=$workRoot", "init", "-backend=false", "-input=false", "-no-color") | Out-Null
+    $terraformInitialized = $true
+    Invoke-Native "terraform" @("-chdir=$workRoot", "validate", "-no-color") | Out-Null
 
-  $duplicatePath = (Resolve-Path (Join-Path $tempRoot "fixtures/rules-duplicate-id.csv")).Path
-  $invalidRulePath = (Resolve-Path (Join-Path $tempRoot "fixtures/rules-invalid-port-protocol.csv")).Path
-  $ownerConflictPath = (Resolve-Path (Join-Path $tempRoot "fixtures/rules-owner-conflict.csv")).Path
-  $invalidNetworkPath = (Resolve-Path (Join-Path $tempRoot "fixtures/invalid-network.json")).Path
-  $missingRulesPath = Join-Path $tempRoot "fixtures/does-not-exist.csv"
-  $behaviorBase = @("plan", "-no-color", "-refresh=false", "-input=false", "-var=name_prefix=$namePrefix", "-var=run_id=$runId", "-var=localstack_endpoint=$LocalStackEndpoint")
-  Assert-PlanReportsCheck $candidateDirectory ($behaviorBase + "-var=rules_csv_path=$duplicatePath") "CSV rule_id values must be globally unique" "duplicate rule IDs reach and fail the uniqueness check without a duplicate-key crash"
-  Assert-PlanReportsCheck $candidateDirectory ($behaviorBase + "-var=rules_csv_path=$invalidRulePath") "Active rules require tcp/udp and valid ordered ports" "invalid protocol and ports reach the rule-domain check"
-  Assert-PlanReportsCheck $candidateDirectory ($behaviorBase + "-var=rules_csv_path=$ownerConflictPath") "All rules in one security group must have the same owner" "conflicting owners reach the group-owner check"
-  Assert-PlanRejected $candidateDirectory ($behaviorBase + "-var-file=$invalidNetworkPath") "network 必须包含有效 VPC/subnet CIDR" "invalid complex network input is rejected by variable validation"
-  Assert-PlanRejected $candidateDirectory ($behaviorBase + "-var=rules_csv_path=$missingRulesPath") "rules_csv_path 必须指向存在的 CSV 文件" "missing rules path is rejected by variable validation"
+    $network = New-NetworkFixture $runId
+    $runtimeVariables = [ordered]@{
+        name_prefix        = $runId
+        run_id             = $runId
+        localstack_endpoint = $LocalstackEndpoint
+        subnet_ids         = $network.Subnets
+    } | ConvertTo-Json -Depth 4
+    [IO.File]::WriteAllText((Join-Path $workRoot "runtime.auto.tfvars.json"), $runtimeVariables, [Text.UTF8Encoding]::new($false))
+    $inputArgs = @()
+    $tests = Invoke-Native "terraform" (@("-chdir=$workRoot", "test", "-test-directory=tests", "-no-color") + $inputArgs)
+    if ($tests.Text -notmatch "Success! 10 passed, 0 failed") {
+        throw "Canonical Terraform 1.6 run count/result mismatch."
+    }
+    Write-Host "[unit] fmt/init/validate and 10 real-data-source Terraform 1.6 runs passed."
 
-  # Tests tear down their mock state; use the same isolated directory for a real LocalStack apply.
-  Invoke-Terraform $candidateDirectory @("apply", "-auto-approve", "-input=false", "-var=name_prefix=$namePrefix", "-var=run_id=$runId", "-var=localstack_endpoint=$LocalStackEndpoint")
+    if ($UnitOnly) {
+        Write-Host "PASS challenge-21 UnitOnly"
+        return
+    }
 
-  $contractRaw = (& terraform "-chdir=$candidateDirectory" output -json topology_contract) -join "`n"
-  if ($LASTEXITCODE -ne 0) { throw "failed to read topology contract" }
-  $contract = $contractRaw | ConvertFrom-Json
-  $vpcId = $contract.vpc_id
-  Assert-True ($contract.vpc_cidr -eq "10.42.0.0/16" -and $contract.rule_count -eq 5) "real topology reports one VPC and five enabled prod rules"
+    Remove-Item -LiteralPath (Join-Path $workRoot "tests") -Recurse -Force
+    $baseArgs = @("-input=false", "-no-color") + $inputArgs
+    $initialPlan = Join-Path $tempRoot "initial.tfplan"
+    Invoke-Native "terraform" (@("-chdir=$workRoot", "plan", "-out=$initialPlan") + $baseArgs) | Out-Null
+    $initial = @(Get-PlanChanges $workRoot $initialPlan)
+    if ($initial.Count -ne 8 -or @($initial | Where-Object { (@($_.change.actions) -join ",") -ne "create" }).Count -ne 0) {
+        throw "Initial saved plan must contain three groups and five rule creates."
+    }
+    Invoke-Native "terraform" @("-chdir=$workRoot", "apply", "-input=false", "-auto-approve", "-no-color", $initialPlan) | Out-Null
 
-  $state = @(& terraform "-chdir=$candidateDirectory" state list)
-  Assert-True (@($state | Where-Object { $_ -match '^aws_subnet\.this\[' }).Count -eq 3) "state contains three stable subnet instances"
-  Assert-True (@($state | Where-Object { $_ -match '^aws_security_group\.this\[' }).Count -eq 3) "state contains three stable security-group instances"
-  Assert-True (@($state | Where-Object { $_ -match '^aws_vpc_security_group_ingress_rule\.this\[' }).Count -eq 5) "state contains five rule_id-keyed ingress instances"
-  Assert-True (-not ($state -match 'this\["[0-9]+-')) "no ingress state address is based on a CSV row index"
+    $reordered = Invoke-Native "terraform" (@("-chdir=$workRoot", "plan", "-detailed-exitcode") + $baseArgs +
+        @("-var=rules_csv_path=../fixtures/rules-reordered.csv")) @(0, 2)
+    if ($reordered.ExitCode -ne 0) { throw "CSV reorder must produce a zero-change plan." }
 
-  $groupRaw = (& aws --endpoint-url $LocalStackEndpoint ec2 describe-security-groups --filters "Name=vpc-id,Values=$vpcId" --output json --no-cli-pager) -join "`n"
-  if ($LASTEXITCODE -ne 0) { throw "failed to inspect LocalStack security groups" }
-  $groups = @(($groupRaw | ConvertFrom-Json).SecurityGroups | Where-Object { $_.GroupName -like "$namePrefix-*" })
-  $permissionCount = @($groups | ForEach-Object { $_.IpPermissions }).Count
-  Assert-True ($groups.Count -eq 3 -and $permissionCount -eq 5) "LocalStack contains three managed groups and five real ingress permissions"
+    $ruleJson = (Invoke-Aws @("ec2", "describe-security-group-rules", "--filters", "Name=tag:RunId,Values=$runId",
+        "Name=tag:RuleID,Values=api-from-web", "--output", "json")).Text | ConvertFrom-Json
+    $rule = @($ruleJson.SecurityGroupRules)
+    if ($rule.Count -ne 1) { throw "Unable to identify the api-from-web rule for drift." }
+    Invoke-Aws @("ec2", "revoke-security-group-ingress", "--group-id", $rule[0].GroupId,
+        "--security-group-rule-ids", $rule[0].SecurityGroupRuleId) | Out-Null
 
-  $cleanExit = Invoke-DetailedPlan $candidateDirectory @("plan", "-detailed-exitcode", "-input=false", "-var=name_prefix=$namePrefix", "-var=run_id=$runId", "-var=localstack_endpoint=$LocalStackEndpoint")
-  Assert-True ($cleanExit -eq 0) "canonical CSV produces a clean plan"
+    $repairPlan = Join-Path $tempRoot "repair.tfplan"
+    Invoke-Native "terraform" (@("-chdir=$workRoot", "plan", "-out=$repairPlan") + $baseArgs) | Out-Null
+    $repair = @(Get-PlanChanges $workRoot $repairPlan)
+    $expected = 'aws_vpc_security_group_ingress_rule.this["api-from-web"]'
+    if ($repair.Count -ne 1 -or $repair[0].address -cne $expected -or
+        (@($repair[0].change.actions) -join ",") -cne "create") {
+        throw "Repair plan must recreate only api-from-web."
+    }
+    Invoke-Native "terraform" @("-chdir=$workRoot", "apply", "-input=false", "-auto-approve", "-no-color", $repairPlan) | Out-Null
 
-  $reorderedPath = (Resolve-Path (Join-Path $tempRoot "fixtures/rules-reordered.csv")).Path
-  $reorderedExit = Invoke-DetailedPlan $candidateDirectory @("plan", "-detailed-exitcode", "-input=false", "-var=name_prefix=$namePrefix", "-var=run_id=$runId", "-var=localstack_endpoint=$LocalStackEndpoint", "-var=rules_csv_path=$reorderedPath")
-  Assert-True ($reorderedExit -eq 0) "reordered equivalent CSV produces a zero-change plan"
+    $clean = Invoke-Native "terraform" (@("-chdir=$workRoot", "plan", "-detailed-exitcode") + $baseArgs) @(0, 2)
+    if ($clean.ExitCode -ne 0) { throw "Repair must end in a clean plan." }
 
-  $ownerRaw = (& terraform "-chdir=$candidateDirectory" output -json rules_by_owner) -join "`n"
-  $owners = $ownerRaw | ConvertFrom-Json
-  Assert-True (($owners.PSObject.Properties.Name -join ",") -eq "data,edge,platform") "owner grouping exposes deterministic owner keys"
-  Assert-True (($owners.platform -join ",") -eq "api-from-web,metrics-from-private") "owner members are stable and sorted"
+    $destroyPlan = Join-Path $tempRoot "destroy.tfplan"
+    Invoke-Native "terraform" (@("-chdir=$workRoot", "plan", "-destroy", "-out=$destroyPlan") + $baseArgs) | Out-Null
+    $destroy = @(Get-PlanChanges $workRoot $destroyPlan)
+    if ($destroy.Count -ne 8 -or @($destroy | Where-Object { (@($_.change.actions) -join ",") -ne "delete" }).Count -ne 0) {
+        throw "Saved destroy plan must contain exactly eight deletes."
+    }
+    Invoke-Native "terraform" @("-chdir=$workRoot", "apply", "-input=false", "-auto-approve", "-no-color", $destroyPlan) | Out-Null
+    $terraformInitialized = $false
 
-  Invoke-Terraform $candidateDirectory @("destroy", "-auto-approve", "-input=false", "-var=name_prefix=$namePrefix", "-var=run_id=$runId", "-var=localstack_endpoint=$LocalStackEndpoint")
-  & aws --endpoint-url $LocalStackEndpoint ec2 describe-vpcs --vpc-ids $vpcId --output json --no-cli-pager 2>$null | Out-Null
-  Assert-True ($LASTEXITCODE -ne 0) "destroy removes the challenge VPC and dependent resources"
-  $residue = Get-RunResources
-  Assert-True ($residue.Rules.Count -eq 0 -and $residue.Groups.Count -eq 0 -and $residue.Subnets.Count -eq 0 -and $residue.Vpcs.Count -eq 0) "destroy leaves no resource carrying this run's unique RunId tag"
+    $remainingGroups = ((Invoke-Aws @("ec2", "describe-security-groups", "--filters", "Name=tag:RunId,Values=$runId",
+        "--query", "SecurityGroups[].GroupId", "--output", "text")).Text).Trim()
+    $remainingRules = ((Invoke-Aws @("ec2", "describe-security-group-rules", "--filters", "Name=tag:RunId,Values=$runId",
+        "--query", "SecurityGroupRules[].SecurityGroupRuleId", "--output", "text")).Text).Trim()
+    if ($remainingGroups -or $remainingRules) { throw "Managed EC2 residue remains after destroy." }
 
-  Write-Host "Challenge 21 passed: 4 canonical runs plus $script:checks contract/lifecycle checks." -ForegroundColor Cyan
+    Write-Host "[e2e] external network data, saved plan, reorder no-op, real rule drift repair, and saved destroy passed."
+    Write-Host "PASS challenge-21 (alignment A, difficulty 96/100)"
 }
 finally {
-  if ($candidateDirectory -and (Test-Path (Join-Path $candidateDirectory "terraform.tfstate"))) {
-    $remainingState = @(& terraform "-chdir=$candidateDirectory" state list 2>$null)
-    if ($LASTEXITCODE -eq 0 -and $remainingState.Count -gt 0) {
-      & terraform "-chdir=$candidateDirectory" destroy -auto-approve -input=false "-var=name_prefix=$namePrefix" "-var=run_id=$runId" "-var=localstack_endpoint=$LocalStackEndpoint" 2>$null | Out-Null
+    if ($terraformInitialized -and (Test-Path -LiteralPath (Join-Path $workRoot "terraform.tfstate")) -and $null -ne $network) {
+        try {
+            Invoke-Native "terraform" @("-chdir=$workRoot", "destroy", "-auto-approve", "-input=false", "-no-color") @(0, 1) | Out-Null
+        }
+        catch {}
     }
-  }
-  # Fallback cleanup uses only the unique RunId and respects dependency order.
-  $env:AWS_ACCESS_KEY_ID = "test"
-  $env:AWS_SECRET_ACCESS_KEY = "test"
-  $env:AWS_DEFAULT_REGION = "us-east-1"
-  try { Remove-RunResources } catch { }
-  $env:AWS_ACCESS_KEY_ID = $oldAccessKey
-  $env:AWS_SECRET_ACCESS_KEY = $oldSecretKey
-  $env:AWS_DEFAULT_REGION = $oldRegion
-
-  $resolvedTemp = [IO.Path]::GetFullPath($tempRoot)
-  if ($resolvedTemp.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase) -and (Test-Path $resolvedTemp)) {
-    Remove-Item -LiteralPath $resolvedTemp -Recurse -Force
-  }
+    if ($null -ne $network) { try { Remove-NetworkFixture $network } catch {} }
+    foreach ($name in $envBefore.Keys) { [Environment]::SetEnvironmentVariable($name, $envBefore[$name]) }
+    if (Test-Path -LiteralPath $tempRoot) {
+        $resolved = [IO.Path]::GetFullPath($tempRoot)
+        $base = [IO.Path]::GetFullPath($tempBase)
+        if ($resolved.StartsWith($base, [StringComparison]::OrdinalIgnoreCase) -and
+            (Split-Path $resolved -Leaf).StartsWith("tfpro-c21-grade-")) {
+            Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }

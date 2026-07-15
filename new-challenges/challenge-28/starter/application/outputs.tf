@@ -1,13 +1,14 @@
 output "deployment_keys" {
-  value = sort(keys(module.application_primary))
+  value = sort(keys(local.deployments))
+  # TODO: add blocking contract/catalog preconditions.
 }
 
-output "deployment_addresses" {
-  value = [for key in sort(keys(module.application_primary)) : "module.application_primary[\"${key}\"].aws_s3_bucket.artifact"]
-}
-
-# TODO: Group stable keys by owner.
-output "deployments_by_owner" {
+output "regional_deployments" {
+  # TODO: merge primary and DR module contracts.
   value = {}
 }
 
+output "deployments_by_owner" {
+  # TODO: publish stable owner groups.
+  value = {}
+}

@@ -1,7 +1,8 @@
 output "role_keys" {
-  description = "稳定排序的角色 key"
+  description = "Stable sorted role keys"
   value       = sort(keys(local.access_catalog))
+
+  # TODO: add independent catalog contract preconditions.
 }
 
-# TODO: 输出敏感 access_manifest（role ARN、policy ARN、policy name）。
-
+# TODO: publish a sensitive access_manifest keyed by the same identities.

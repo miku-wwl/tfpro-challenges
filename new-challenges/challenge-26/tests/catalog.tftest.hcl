@@ -1,17 +1,18 @@
-mock_provider "aws" {
-  mock_data "aws_iam_policy_document" {
-    defaults = {
-      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-}
-
 run "catalog_has_stable_keys" {
   command = plan
 
   assert {
     condition     = join(",", output.role_keys) == "payments-ledger,platform-delivery,security-detector"
     error_message = "角色必须使用排序后的 team-workload 稳定 key。"
+  }
+}
+
+run "manifest_uses_the_same_stable_keys" {
+  command = plan
+
+  assert {
+    condition     = join(",", sort(keys(nonsensitive(output.access_manifest)))) == "payments-ledger,platform-delivery,security-detector"
+    error_message = "The sensitive manifest must preserve the logical identity keys."
   }
 }
 
@@ -48,9 +49,39 @@ run "rejects_unsafe_catalog" {
   }
 
   expect_failures = [
-    check.unique_identities,
-    check.known_least_privilege_policies,
-    check.session_duration_range,
-    terraform_data.catalog_contract,
+    output.role_keys,
   ]
+}
+
+run "stage_environment_is_supported" {
+  command = plan
+
+  variables {
+    environment = "stage"
+  }
+
+  assert {
+    condition     = length(output.role_keys) == 3
+    error_message = "A supported environment must preserve the catalog graph."
+  }
+}
+
+run "rejects_invalid_name_prefix" {
+  command = plan
+
+  variables {
+    name_prefix = "BAD"
+  }
+
+  expect_failures = [var.name_prefix]
+}
+
+run "rejects_unknown_region" {
+  command = plan
+
+  variables {
+    aws_region = "ap-southeast-2"
+  }
+
+  expect_failures = [var.aws_region]
 }

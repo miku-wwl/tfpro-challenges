@@ -1,67 +1,27 @@
-mock_provider "aws" {
-  mock_resource "aws_vpc" {
-    defaults = { id = "vpc-primary" }
-  }
-  mock_resource "aws_subnet" {
-    defaults = { id = "subnet-primary" }
-  }
-  mock_resource "aws_security_group" {
-    defaults = { id = "sg-primary" }
-  }
-  mock_resource "aws_iam_role" {
-    defaults = { arn = "arn:aws:iam::000000000000:role/mock-compute" }
-  }
-  mock_resource "aws_iam_instance_profile" {
-    defaults = { arn = "arn:aws:iam::000000000000:instance-profile/mock-compute" }
-  }
-}
-
-mock_provider "aws" {
-  alias = "dr"
-  mock_resource "aws_vpc" {
-    defaults = { id = "vpc-dr" }
-  }
-  mock_resource "aws_subnet" {
-    defaults = { id = "subnet-dr" }
-  }
-  mock_resource "aws_security_group" {
-    defaults = { id = "sg-dr" }
-  }
-}
-
-run "publish_versioned_compute_contract" {
+run "publish_compute_contract" {
   command = plan
-
   assert {
-    condition     = output.compute_contract.contract_version == 1
-    error_message = "The compute contract version must be explicit."
+    condition     = output.compute_contract.contract_version == 1 && output.compute_contract.run_id == var.run_id
+    error_message = "foundation contract version/run mismatch"
   }
   assert {
     condition     = output.compute_contract.primary.region == "us-east-1" && output.compute_contract.dr.region == "us-west-2"
-    error_message = "The regional contract is crossed."
+    error_message = "regional contract is crossed"
   }
   assert {
-    condition     = output.compute_contract.primary.cidr == "10.35.0.0/16" && output.compute_contract.dr.cidr == "10.36.0.0/16"
-    error_message = "Primary and DR network contracts must remain isolated."
-  }
-  assert {
-    condition     = output.compute_contract.identity.instance_profile_name == "tfpro-c35-compute-profile"
-    error_message = "The instance profile is absent from the contract."
+    condition     = output.compute_contract.primary.subnet_id == var.primary_subnet_id && output.compute_contract.dr.subnet_id == var.dr_subnet_id
+    error_message = "external subnet identity was lost"
   }
 }
 
-run "reject_same_region" {
+run "invalid_run_id_is_rejected" {
   command = plan
-  variables {
-    dr_region = "us-east-1"
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { run_id = "BAD" }
+  expect_failures = [var.run_id]
 }
 
-run "reject_same_vpc_cidr" {
+run "unsafe_endpoint_is_rejected" {
   command = plan
-  variables {
-    dr_vpc_cidr = "10.35.0.0/16"
-  }
-  expect_failures = [terraform_data.contract_guard]
+  variables { localstack_endpoint = "https://aws.amazon.com" }
+  expect_failures = [var.localstack_endpoint]
 }

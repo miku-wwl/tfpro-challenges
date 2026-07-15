@@ -18,10 +18,6 @@ variable "workload" {
   type = string
 }
 
-variable "session_seconds" {
-  type = number
-}
-
 variable "actions" {
   type = list(string)
 }
@@ -29,8 +25,3 @@ variable "actions" {
 variable "resources" {
   type = list(string)
 }
-
-variable "boundary_arn" {
-  type = string
-}
-

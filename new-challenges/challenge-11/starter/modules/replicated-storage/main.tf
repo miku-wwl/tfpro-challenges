@@ -1,28 +1,22 @@
-data "aws_region" "primary" {
-  provider = aws.primary
-}
-
-data "aws_region" "recovery" {
-  # TODO: 显式绑定 recovery slot。
-}
-
 data "aws_caller_identity" "primary" {
   provider = aws.primary
 }
 
 data "aws_caller_identity" "recovery" {
-  # TODO: 显式绑定 recovery slot。
+  # TODO 3: bind the recovery caller lookup to aws.recovery.
 }
 
 resource "aws_s3_bucket" "primary" {
-  provider = aws.primary
-  bucket   = "${var.name_prefix}-primary"
-  tags     = merge(var.common_tags, { role = "primary" })
+  provider      = aws.primary
+  bucket        = "${var.name_prefix}-primary"
+  force_destroy = true
+  tags          = merge(var.common_tags, { role = "primary", region = var.primary_region })
 }
 
 resource "aws_s3_bucket" "recovery" {
-  # TODO: 显式绑定 recovery slot。
-  bucket = "${var.name_prefix}-recovery"
-  tags   = merge(var.common_tags, { role = "recovery" })
+  # TODO 4: bind the recovery bucket to aws.recovery.
+  bucket        = "${var.name_prefix}-recovery"
+  force_destroy = true
+  tags          = merge(var.common_tags, { role = "recovery", region = var.recovery_region })
 }
 

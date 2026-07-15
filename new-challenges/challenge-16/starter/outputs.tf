@@ -1,15 +1,10 @@
-output "service_names" {
-  # TODO: 输出排序后的业务名称，而不是 for_each key。
-  value = sort(keys(local.services_by_key))
+output "service_names" { value = sort(keys(local.services)) }
+output "bucket_name" { value = aws_s3_bucket.inventory.bucket }
+output "index_key" { value = aws_s3_object.index.key }
+output "inventory_sha256" { value = sha256(jsonencode(local.canonical_inventory)) }
+output "managed_addresses" {
+  value = concat(
+    ["aws_s3_bucket.inventory", "aws_s3_object.index"],
+    [for name in sort(keys(local.services)) : "aws_s3_object.service[\"${name}\"]"],
+  )
 }
-
-output "service_addresses" {
-  value = sort([
-    for key in keys(local.services_by_key) : "terraform_data.service[\"${key}\"]"
-  ])
-}
-
-output "inventory_sha256" {
-  value = sha256(local_file.inventory.content)
-}
-

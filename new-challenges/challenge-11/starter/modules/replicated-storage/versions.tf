@@ -4,8 +4,8 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
-      # TODO: child 实际使用两个 provider slot，声明完整 configuration_aliases。
+      version = "~> 5.100.0"
+      # TODO 2: declare both provider slots used by this module.
       configuration_aliases = [aws.primary]
     }
   }

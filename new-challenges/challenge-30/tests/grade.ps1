@@ -1,232 +1,52 @@
-param(
-    [string]$Candidate = (Join-Path $PSScriptRoot "../starter")
-)
-
-$ErrorActionPreference = "Stop"
-
-function Copy-CleanTree([string]$Source, [string]$Destination) {
-    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
-        if ($item.Name -in @(".terraform", ".terraform.lock.hcl", "terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info") -or
-            $item.Name -like "tests-generated*" -or $item.Extension -eq ".tfplan") {
-            continue
-        }
-        $target = Join-Path $Destination $item.Name
-        if ($item.PSIsContainer) { Copy-CleanTree $item.FullName $target } else { Copy-Item -LiteralPath $item.FullName -Destination $target -Force }
-    }
+[CmdletBinding()]
+param([string]$Candidate=(Join-Path $PSScriptRoot '..\starter'),[string]$LocalstackEndpoint='http://localhost:4566',[switch]$UnitOnly)
+$ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+function Assert-Endpoint([string]$v){if($v -notmatch '^https?://(?:localhost|127\.0\.0\.1|\[::1\]):[0-9]{1,5}$'){throw "Unsafe endpoint: $v"};try{$u=[Uri]$v}catch{throw "Invalid endpoint: $v"};if($u.DnsSafeHost -notin @('localhost','127.0.0.1','::1') -or $u.UserInfo -ne '' -or $u.AbsolutePath -ne '/' -or $u.Query -ne '' -or $u.Fragment -ne '' -or $u.Port -lt 1 -or $u.Port -gt 65535){throw "Unsafe endpoint: $v"}}
+function Native([string]$File,[string[]]$Arguments,[int[]]$Allowed=@(0),[switch]$Quiet){$old=$ErrorActionPreference;$ErrorActionPreference='Continue';$lines=@(&$File @Arguments 2>&1);$code=$LASTEXITCODE;$ErrorActionPreference=$old;$t=$lines-join"`n";if(-not $Quiet -and $lines.Count){$lines|Out-Host};if($code -notin $Allowed){throw "$File failed ($code): $($Arguments-join' ')`n$t"};[pscustomobject]@{Code=$code;Text=$t}}
+function Tf([string]$Dir,[string[]]$Arguments,[int[]]$Allowed=@(0),[switch]$Quiet){Native 'terraform' (@("-chdir=$Dir")+$Arguments) $Allowed -Quiet:$Quiet}
+function Aws([string[]]$Arguments,[int[]]$Allowed=@(0),[switch]$Quiet){Native 'aws.exe' (@('--endpoint-url',$LocalstackEndpoint,'--region','us-east-1')+$Arguments) $Allowed -Quiet:$Quiet}
+function Copy-Clean([string]$s,[string]$d){New-Item -ItemType Directory -Force $d|Out-Null;foreach($i in Get-ChildItem -LiteralPath $s -Force){if($i.Name -in @('.terraform','.terraform.lock.hcl','terraform.tfstate','terraform.tfstate.backup') -or $i.Extension -in @('.tfplan','.tfstate')){continue};Copy-Item $i.FullName $d -Recurse -Force}}
+function Exact-Tests([string]$d,[int]$n){$r=Tf $d @('test','-test-directory=tests','-no-color');if([regex]::Matches($r.Text,"(?m)^Success!\s+$n passed,\s+0 failed\.\s*$").Count-ne 1 -or [regex]::Matches($r.Text,'(?m)^\s*run\s+"[^"]+"\.\.\.\s+pass\s*$').Count-ne $n){throw "Expected $n exact tests."}}
+function Backend-Args([string]$bucket,[string]$key){@('init','-input=false','-no-color',"-backend-config=bucket=$bucket","-backend-config=key=$key",'-backend-config=region=us-east-1',"-backend-config=endpoint=$LocalstackEndpoint",'-backend-config=access_key=test','-backend-config=secret_key=test','-backend-config=force_path_style=true','-backend-config=skip_credentials_validation=true','-backend-config=skip_metadata_api_check=true','-backend-config=skip_requesting_account_id=true')}
+function Plan-Json([string]$d,[string]$p){((Tf $d @('show','-json',$p) -Quiet).Text|ConvertFrom-Json)}
+Assert-Endpoint $LocalstackEndpoint
+$candidatePath=(Resolve-Path -LiteralPath $Candidate).Path;$files=@(Get-ChildItem $candidatePath -Recurse -File);if($files.Count-eq 0 -or @($files|Where-Object Extension -ne '.tf').Count){throw 'Candidate must contain HCL only.'}
+$text=($files|ForEach-Object{Get-Content -Raw $_.FullName})-join"`n";if($text-match'(?i)\b(mock_provider|override_data|override_resource|terraform_data|profile\s*=|shared_credentials|assume_role)\b|AKIA[0-9A-Z]{16}'){throw 'Forbidden mechanism found.'};if([regex]::Matches($text,'backend\s+"s3"\s*\{\s*\}').Count-ne 3){throw 'Every root needs an empty partial S3 backend.'};if([regex]::Matches($text,'data\s+"terraform_remote_state"').Count-ne 3 -or $text-notmatch 'backend\s*=\s*"s3"'){throw 'Exact S3 remote-state consumers missing.'}
+$types=@([regex]::Matches($text,'(?:resource|data)\s+"(aws_[a-z0-9_]+)"')|ForEach-Object{$_.Groups[1].Value}|Sort-Object -Unique);$allowed=@('aws_caller_identity','aws_iam_instance_profile','aws_iam_policy_document','aws_iam_role','aws_s3_bucket','aws_s3_object');if(@($types|Where-Object{$_-notin $allowed}).Count){throw "Out-of-list AWS type: $($types-join',')"};if($text-notmatch'module\s+"primary"[\s\S]*?providers\s*=\s*\{\s*aws\s*=\s*aws\s*\}' -or $text-notmatch'module\s+"dr"[\s\S]*?aws\s*=\s*aws\.dr'){throw 'Static provider slot routing missing.'};$child=(Get-Content -Raw (Join-Path $candidatePath 'workloads\modules\regional\main.tf'));if($child-match'provider\s+"aws"'){throw 'Child module must not configure a provider.'}
+$runId='c30'+([Guid]::NewGuid().ToString('N')).Substring(0,8);$temp=Join-Path ([IO.Path]::GetTempPath()) "tfpro-c30-$runId";$work=Join-Path $temp 'candidate';$stateBucket="tfpro-c30-state-$runId";$keys=@{foundation='states/foundation.tfstate';platform='states/platform.tfstate';workloads='states/workloads.tfstate'};$roots=@{};$applied=@();$failure=$null
+$oldA=$env:AWS_ACCESS_KEY_ID;$oldS=$env:AWS_SECRET_ACCESS_KEY;$oldR=$env:AWS_DEFAULT_REGION;$oldRun=$env:TF_VAR_run_id;$oldBucket=$env:TF_VAR_state_bucket;$oldFk=$env:TF_VAR_foundation_state_key;$oldPk=$env:TF_VAR_platform_state_key;$env:AWS_ACCESS_KEY_ID='test';$env:AWS_SECRET_ACCESS_KEY='test';$env:AWS_DEFAULT_REGION='us-east-1';$env:TF_VAR_run_id=$runId;$env:TF_VAR_state_bucket=$stateBucket;$env:TF_VAR_foundation_state_key=$keys.foundation;$env:TF_VAR_platform_state_key=$keys.platform
+try{
+ try{Invoke-WebRequest -UseBasicParsing -Uri "$($LocalstackEndpoint.TrimEnd('/'))/_localstack/health" -TimeoutSec 5|Out-Null}catch{throw 'LocalStack unavailable.'};Aws @('s3api','create-bucket','--bucket',$stateBucket)|Out-Null;Copy-Clean $candidatePath $work;Copy-Item (Join-Path $PSScriptRoot '..\fixtures') (Join-Path $temp 'fixtures') -Recurse -Force
+ foreach($name in @('foundation','platform','workloads')){$roots[$name]=Join-Path $work $name;New-Item -ItemType Directory -Force (Join-Path $roots[$name] 'tests')|Out-Null;Copy-Item (Join-Path $PSScriptRoot "$name.tftest.hcl") (Join-Path $roots[$name] "tests\$name.tftest.hcl");Tf $roots[$name] (Backend-Args $stateBucket $keys[$name])|Out-Null;Tf $roots[$name] @('validate','-no-color')|Out-Null}
+ Exact-Tests $roots.foundation 2;$fp=Join-Path $roots.foundation 'foundation.tfplan';Tf $roots.foundation @('plan','-input=false','-no-color',"-out=$fp")|Out-Null;$fj=Plan-Json $roots.foundation $fp;if(@($fj.resource_changes|Where-Object{(@($_.change.actions)-join',')-eq'create'}).Count-ne 2){throw 'Foundation saved plan must create exactly role/profile.'};Tf $roots.foundation @('apply','-input=false','-no-color',$fp)|Out-Null;$applied+='foundation'
+ Exact-Tests $roots.platform 2;$pp=Join-Path $roots.platform 'platform.tfplan';Tf $roots.platform @('plan','-input=false','-no-color',"-out=$pp")|Out-Null;$pj=Plan-Json $roots.platform $pp;if(@($pj.resource_changes|Where-Object{(@($_.change.actions)-join',')-eq'create'}).Count-ne 2){throw 'Platform saved plan must create two buckets.'};Tf $roots.platform @('apply','-input=false','-no-color',$pp)|Out-Null;$applied+='platform'
+ Exact-Tests $roots.workloads 4;if($UnitOnly){Write-Host 'PASS: Challenge 30 exact 8/8 TF1.6 tests on real S3 remote states.';return};$wp=Join-Path $roots.workloads 'workloads.tfplan';Tf $roots.workloads @('plan','-input=false','-no-color',"-out=$wp")|Out-Null;$wj=Plan-Json $roots.workloads $wp;if(@($wj.resource_changes|Where-Object{(@($_.change.actions)-join',')-eq'create'}).Count-ne 4){throw 'Workloads plan must create four objects.'};Tf $roots.workloads @('apply','-input=false','-no-color',$wp)|Out-Null;$applied+='workloads'
+ $contract=((Tf $roots.workloads @('output','-json','deployment_contract') -Quiet).Text|ConvertFrom-Json);if($contract.keys.Count-ne 4){throw 'Deployment output key count mismatch.'};foreach($p in $contract.objects.PSObject.Properties){$o=$p.Value;$head=(Aws @('s3api','head-object','--bucket',$o.bucket,'--key',$o.key,'--output','json') -Quiet).Text|ConvertFrom-Json;if($head.Metadata.'run-id'-ne$runId){throw "$($p.Name) metadata mismatch."};$body=Join-Path $temp (($p.Name-replace'@','-')+'.json');Aws @('s3api','get-object','--bucket',$o.bucket,'--key',$o.key,$body)|Out-Null;$payload=Get-Content -Raw $body|ConvertFrom-Json;if($payload.role_name-notmatch$runId){throw "$($p.Name) payload contract mismatch."};$tagSet=((Aws @('s3api','get-object-tagging','--bucket',$o.bucket,'--key',$o.key,'--output','json') -Quiet).Text|ConvertFrom-Json).TagSet;$tags=@{};foreach($tag in $tagSet){$tags[$tag.Key]=$tag.Value};if($tags.RunId-ne$runId -or $tags.Location-ne$payload.location -or $tags.Workload-ne$payload.name -or $tags.Owner-ne$payload.owner){throw "$($p.Name) tag contract mismatch."}}
+ $reorder=Tf $roots.workloads @('plan','-detailed-exitcode','-input=false','-no-color','-var=environment=prod','-var=catalog_file=../../fixtures/workloads-reordered.csv') @(0,2) -Quiet;if($reorder.Code-ne 0){throw 'CSV reorder changed graph.'};$victim=$contract.objects.'api@primary';$driftFile=Join-Path $temp 'drift.json';[IO.File]::WriteAllText($driftFile,'{"drift":true}',[Text.UTF8Encoding]::new($false));Aws @('s3api','put-object','--bucket',$victim.bucket,'--key',$victim.key,'--body',$driftFile)|Out-Null;$dp=Join-Path $roots.workloads 'drift.tfplan';$dr=Tf $roots.workloads @('plan','-detailed-exitcode','-input=false','-no-color',"-out=$dp") @(0,2) -Quiet;if($dr.Code-ne 2){throw 'Object drift not detected.'};$dj=Plan-Json $roots.workloads $dp;$updates=@($dj.resource_changes|Where-Object{$_.address-eq'module.primary.aws_s3_object.workload["api@primary"]'-and(@($_.change.actions)-join',')-eq'update'});if($updates.Count-ne 1){throw 'Drift plan must update only api@primary.'};Tf $roots.workloads @('apply','-input=false','-no-color',$dp)|Out-Null
+ foreach($name in @('foundation','platform','workloads')){$c=Tf $roots[$name] @('plan','-detailed-exitcode','-input=false','-no-color') @(0,2) -Quiet;if($c.Code-ne 0){throw "$name plan not clean."}};foreach($name in @('workloads','platform','foundation')){Tf $roots[$name] @('destroy','-auto-approve','-input=false','-no-color')|Out-Null;$applied=@($applied|Where-Object{$_-ne$name})};Aws @('s3','rb',"s3://$stateBucket",'--force')|Out-Null;$b=(Aws @('s3api','list-buckets','--query','Buckets[].Name','--output','text') -Quiet).Text;if($b-match"tfpro-c30-(primary|dr)-$runId"){throw 'Release bucket residue.'};$roles=(Aws @('iam','list-roles','--query',"Roles[?contains(RoleName, '$runId')].RoleName",'--output','text') -Quiet).Text;if(-not[string]::IsNullOrWhiteSpace($roles)){throw 'IAM residue.'};Write-Host 'PASS: Challenge 30 TF1.6 + real three S3 states + contracts/saved plans/reorder/drift/reverse destroy + zero residue.'
 }
-
-function Remove-HclComments([string]$Text) {
-    $builder = [Text.StringBuilder]::new($Text.Length)
-    $state = "code"
-    for ($i = 0; $i -lt $Text.Length; $i++) {
-        $current = $Text[$i]
-        $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
-        if ($state -eq "code") {
-            if ($current -eq '"') { [void]$builder.Append($current); $state = "string" }
-            elseif ($current -eq '#') { [void]$builder.Append(' '); $state = "line" }
-            elseif ($current -eq '/' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "line" }
-            elseif ($current -eq '/' -and $next -eq '*') { [void]$builder.Append("  "); $i++; $state = "block" }
-            else { [void]$builder.Append($current) }
-        }
-        elseif ($state -eq "string") {
-            [void]$builder.Append($current)
-            if ($current -eq '\' -and $i + 1 -lt $Text.Length) { $i++; [void]$builder.Append($Text[$i]) }
-            elseif ($current -eq '"') { $state = "code" }
-        }
-        elseif ($state -eq "line") {
-            if ($current -eq "`n") { [void]$builder.Append($current); $state = "code" }
-            else { [void]$builder.Append(' ') }
-        }
-        else {
-            if ($current -eq '*' -and $next -eq '/') { [void]$builder.Append("  "); $i++; $state = "code" }
-            elseif ($current -eq "`n") { [void]$builder.Append($current) }
-            else { [void]$builder.Append(' ') }
-        }
-    }
-    return $builder.ToString()
+catch {
+  $failure = $_
 }
-
-function Get-HclBlocks([string]$Text, [string]$HeaderPattern) {
-    $blocks = [Collections.Generic.List[string]]::new()
-    foreach ($match in [regex]::Matches($Text, $HeaderPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-        $open = $Text.IndexOf('{', $match.Index)
-        if ($open -lt 0) { continue }
-        $depth = 0
-        $inString = $false
-        for ($i = $open; $i -lt $Text.Length; $i++) {
-            $current = $Text[$i]
-            if ($inString) {
-                if ($current -eq '\') { $i++; continue }
-                if ($current -eq '"') { $inString = $false }
-                continue
-            }
-            if ($current -eq '"') { $inString = $true; continue }
-            if ($current -eq '{') { $depth++ }
-            elseif ($current -eq '}') {
-                $depth--
-                if ($depth -eq 0) {
-                    $blocks.Add($Text.Substring($match.Index, $i - $match.Index + 1))
-                    break
-                }
-            }
-        }
+finally {
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  foreach ($name in @('workloads', 'platform', 'foundation')) {
+    if ($roots.ContainsKey($name) -and (Test-Path -LiteralPath $roots[$name])) {
+      & terraform "-chdir=$($roots[$name])" destroy -auto-approve -input=false -no-color 2>$null | Out-Null
     }
-    return @($blocks)
-}
-
-function Assert-ExactAssignment([string]$Block, [string]$Name, [string]$ExpectedPattern, [string]$Context) {
-    $assignments = @([regex]::Matches($Block, '(?m)^[ \t]*' + [regex]::Escape($Name) + '\s*=\s*(?<value>[^\r\n]+?)\s*$'))
-    if ($assignments.Count -ne 1 -or $assignments[0].Groups['value'].Value.Trim() -notmatch ('^(?:' + $ExpectedPattern + ')$')) {
-        throw "$Context must set $Name exactly once to the required safe value."
-    }
-}
-
-function Assert-AwsProviderPair([string]$Source, [string[]]$Services, [bool]$RequirePathStyle, [string]$Context) {
-    $blocks = @(Get-HclBlocks $Source '(?m)^[ \t]*provider\s+"aws"\s*\{')
-    if ($blocks.Count -ne 2) { throw "$Context must contain exactly two AWS provider blocks." }
-    $defaultBlocks = @($blocks | Where-Object { $_ -notmatch '(?m)^[ \t]*alias\s*=' })
-    $drBlocks = @($blocks | Where-Object { [regex]::Matches($_, '(?m)^[ \t]*alias\s*=\s*"dr"\s*$').Count -eq 1 })
-    if ($defaultBlocks.Count -ne 1 -or $drBlocks.Count -ne 1) {
-        throw "$Context must contain exactly one default provider and one alias dr provider."
-    }
-    $pairs = @(
-        @{ Block = $defaultBlocks[0]; Region = 'var\.primary_region'; Name = "$Context default provider" },
-        @{ Block = $drBlocks[0]; Region = 'var\.dr_region'; Name = "$Context dr provider" }
-    )
-    foreach ($pair in $pairs) {
-        Assert-ExactAssignment $pair.Block 'region' $pair.Region $pair.Name
-        Assert-ExactAssignment $pair.Block 'access_key' '"test"' $pair.Name
-        Assert-ExactAssignment $pair.Block 'secret_key' '"test"' $pair.Name
-        foreach ($flag in @('skip_credentials_validation', 'skip_metadata_api_check', 'skip_requesting_account_id')) {
-            Assert-ExactAssignment $pair.Block $flag 'true' $pair.Name
-        }
-        foreach ($service in $Services) {
-            Assert-ExactAssignment $pair.Block $service 'var\.localstack_endpoint' $pair.Name
-        }
-        if ($RequirePathStyle) { Assert-ExactAssignment $pair.Block 's3_use_path_style' 'true' $pair.Name }
-    }
-}
-
-function Get-HclBlockBody([string]$Text, [string]$Kind, [string]$FirstLabel, [string]$SecondLabel = "") {
-    $labels = if ($SecondLabel) { "\s+`"$([regex]::Escape($FirstLabel))`"\s+`"$([regex]::Escape($SecondLabel))`"" } else { "\s+`"$([regex]::Escape($FirstLabel))`"" }
-    $pattern = "(?ms)^[ \t]*$Kind$labels\s*\{(?<body>.*?)(?=^[ \t]*(?:(?:resource|data|module|output|locals|check|variable|terraform)\b|provider\s+\x22)|\z)"
-    $match = [regex]::Match($Text, $pattern)
-    if (-not $match.Success) { throw "Missing $Kind block $FirstLabel $SecondLabel" }
-    return $match.Groups["body"].Value
-}
-
-$LabRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$CandidateRoot = (Resolve-Path $Candidate).Path
-$allTf = (Get-ChildItem $CandidateRoot -Recurse -Filter *.tf -File | ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n"
-$safeTf = Remove-HclComments $allTf
-if ([regex]::Matches($safeTf, 'default\s*=\s*"http://(localhost|127\.0\.0\.1):4566"').Count -ne 3) {
-    throw "Every root must default to the loopback LocalStack edge endpoint."
-}
-
-$foundationRoot = Join-Path $CandidateRoot "foundation"
-$platformRoot = Join-Path $CandidateRoot "platform"
-$workloadsRoot = Join-Path $CandidateRoot "workloads"
-$foundationSource = Remove-HclComments (((Get-ChildItem $foundationRoot -File -Filter "*.tf") | ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n")
-$platformSource = Remove-HclComments (((Get-ChildItem $platformRoot -File -Filter "*.tf") | ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n")
-$workloadsSource = Remove-HclComments (((Get-ChildItem $workloadsRoot -File -Filter "*.tf") | ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n")
-Assert-AwsProviderPair $foundationSource @('ec2', 'sts') $false 'foundation root'
-Assert-AwsProviderPair $platformSource @('ec2', 'sns', 'dynamodb', 'sts') $false 'platform root'
-Assert-AwsProviderPair $workloadsSource @('s3', 'sts') $true 'workloads root'
-
-$foundationMain = Remove-HclComments (Get-Content -Raw (Join-Path $foundationRoot "main.tf"))
-$platformMain = Remove-HclComments (Get-Content -Raw (Join-Path $platformRoot "main.tf"))
-$workloadsMain = Remove-HclComments (Get-Content -Raw (Join-Path $workloadsRoot "main.tf"))
-$regionalMain = Remove-HclComments (Get-Content -Raw (Join-Path $CandidateRoot "workloads/modules/regional/main.tf"))
-$drVpc = Get-HclBlockBody $foundationMain "resource" "aws_vpc" "dr"
-$drSubnet = Get-HclBlockBody $foundationMain "resource" "aws_subnet" "dr"
-if ($drVpc -notmatch '(?m)^[ \t]*provider\s*=\s*aws\.dr\s*$' -or
-    $drSubnet -notmatch '(?m)^[ \t]*provider\s*=\s*aws\.dr\s*$') {
-    throw "Both DR foundation resources must use aws.dr."
-}
-foreach ($resource in @("aws_security_group", "aws_sns_topic", "aws_dynamodb_table")) {
-    $body = Get-HclBlockBody $platformMain "resource" $resource "dr"
-    if ($body -notmatch '(?m)^[ \t]*provider\s*=\s*aws\.dr\s*$') {
-        throw "The DR $resource must use aws.dr."
-    }
-}
-$drModule = Get-HclBlockBody $workloadsMain "module" "dr"
-if ($workloadsMain -notmatch '(?s)"\$\{name\}@\$\{location\}"' -or
-    $drModule -notmatch '(?m)^[ \t]*providers\s*=\s*\{\s*aws\s*=\s*aws\.dr\s*\}') {
-    throw "Workloads need stable name@location keys and explicit DR provider routing."
-}
-if ($regionalMain -notmatch '(?s)jsonencode\s*\(\s*\{.*?network\s*=\s*var\.network_contract.*?platform\s*=\s*var\.platform_contract') {
-    throw "Each manifest must encode both upstream contracts."
-}
-
-$health = Invoke-RestMethod -Uri "http://localhost:4566/_localstack/health" -TimeoutSec 5
-foreach ($service in @("ec2", "s3", "sns", "dynamodb", "sts")) {
-    if ($health.services.$service -notin @("available", "running")) { throw "LocalStack $service is unavailable." }
-}
-
-$tempBase = [IO.Path]::GetTempPath()
-$temp = Join-Path $tempBase ("tfpro-c30-" + [guid]::NewGuid().ToString("N"))
-$workRoot = Join-Path $temp "candidate"
-$foundation = Join-Path $workRoot "foundation"
-$platform = Join-Path $workRoot "platform"
-$workloads = Join-Path $workRoot "workloads"
-$runId = "c30" + [guid]::NewGuid().ToString("N").Substring(0, 10)
-$failure = $null
-try {
-    New-Item -ItemType Directory -Path $temp | Out-Null
-    Copy-CleanTree $CandidateRoot $workRoot
-    Copy-CleanTree (Join-Path $LabRoot "fixtures") (Join-Path $temp "fixtures")
-
-    $testCases = @(
-        @{ Root = $foundation; Test = "foundation.tftest.hcl"; Passed = 2 },
-        @{ Root = $platform; Test = "platform.tftest.hcl"; Passed = 3 },
-        @{ Root = $workloads; Test = "workloads.tftest.hcl"; Passed = 7 }
-    )
-    foreach ($case in $testCases) {
-        $testName = "tests-generated-$PID"
-        $testDir = Join-Path $case.Root $testName
-        New-Item -ItemType Directory -Force $testDir | Out-Null
-        Copy-Item (Join-Path $PSScriptRoot $case.Test) $testDir -Force
-        try {
-            & terraform "-chdir=$($case.Root)" fmt -check -recursive
-            if ($LASTEXITCODE) { throw "fmt failed for $($case.Root)" }
-            & terraform "-chdir=$($case.Root)" init -backend=false -input=false -no-color
-            if ($LASTEXITCODE) { throw "init failed for $($case.Root)" }
-            & terraform "-chdir=$($case.Root)" validate -no-color
-            if ($LASTEXITCODE) { throw "validate failed for $($case.Root)" }
-            $testOutput = (& terraform "-chdir=$($case.Root)" test "-test-directory=$testName" -no-color 2>&1) -join "`n"
-            Write-Host $testOutput
-            $summaryCount = [regex]::Matches($testOutput, "(?m)^Success!\s+$($case.Passed) passed,\s+0 failed\.\s*$").Count
-            $runPassCount = [regex]::Matches($testOutput, '(?m)^[ \t]+run\s+"[^"]+"\.\.\.\s+pass\s*$').Count
-            if ($LASTEXITCODE -or $summaryCount -ne 1 -or $runPassCount -ne $case.Passed) {
-                throw "Contract tests failed or were not discovered for $($case.Root)"
-            }
-        } finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    foreach ($root in @($foundation, $platform, $workloads)) {
-        & terraform "-chdir=$root" apply -auto-approve -input=false -no-color -var "run_id=$runId" | Out-Null
-        if ($LASTEXITCODE) { throw "E2E apply failed for $root" }
-    }
-    foreach ($root in @($foundation, $platform, $workloads)) {
-        & terraform "-chdir=$root" plan -detailed-exitcode -input=false -no-color -var "run_id=$runId" | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Repeated plan is not empty for $root" }
-    }
-} catch {
-    $failure = $_
-} finally {
-    foreach ($root in @($workloads, $platform, $foundation)) {
-        if ((Test-Path $root) -and (Test-Path (Join-Path $root "terraform.tfstate"))) {
-            & terraform "-chdir=$root" destroy -auto-approve -input=false -no-color -var "run_id=$runId" | Out-Null
-            if ($LASTEXITCODE -and -not $failure) { $failure = "E2E destroy failed for $root" }
-        }
-    }
-    $resolved = [IO.Path]::GetFullPath($temp)
-    if ($resolved.StartsWith([IO.Path]::GetFullPath($tempBase), [StringComparison]::OrdinalIgnoreCase) -and (Split-Path $resolved -Leaf).StartsWith("tfpro-c30-")) {
-        Remove-Item $resolved -Recurse -Force -ErrorAction SilentlyContinue
-    }
+  }
+  & aws.exe --endpoint-url $LocalstackEndpoint --region us-east-1 s3 rb "s3://$stateBucket" --force 2>$null | Out-Null
+  $env:AWS_ACCESS_KEY_ID = $oldA
+  $env:AWS_SECRET_ACCESS_KEY = $oldS
+  $env:AWS_DEFAULT_REGION = $oldR
+  $env:TF_VAR_run_id = $oldRun
+  $env:TF_VAR_state_bucket = $oldBucket
+  $env:TF_VAR_foundation_state_key = $oldFk
+  $env:TF_VAR_platform_state_key = $oldPk
+  if (Test-Path -LiteralPath $temp) {
+    Remove-Item -LiteralPath $temp -Recurse -Force
+  }
+  $ErrorActionPreference = $old
 }
 if ($failure) { throw $failure }
-Write-Host "PASS: Challenge 30 mock contracts and LocalStack three-state E2E verified."

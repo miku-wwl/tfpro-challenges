@@ -1,22 +1,29 @@
 variable "run_id" {
-  type    = string
-  default = "tfpro-c28"
-}
-
-variable "network_state_path" {
-  type    = string
-  default = "../network/terraform.tfstate"
-}
-
-variable "catalog_file" {
-  type    = string
-  default = "../../fixtures/applications.csv"
+  type = string
 }
 
 variable "target_environment" {
   type    = string
   default = "prod"
-  # TODO: Reject unknown environments.
+  # TODO: allow only dev, stage, prod.
+}
+
+variable "catalog_file" {
+  type    = string
+  default = "../fixtures/applications.csv"
+}
+
+variable "state_bucket" {
+  type = string
+}
+
+variable "foundation_state_key" {
+  type    = string
+  default = "foundation/terraform.tfstate"
+}
+
+variable "expected_platform_revision" {
+  type = number
 }
 
 variable "primary_region" {
@@ -32,9 +39,4 @@ variable "dr_region" {
 variable "localstack_endpoint" {
   type    = string
   default = "http://localhost:4566"
-  validation {
-    condition     = can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]+$", var.localstack_endpoint))
-    error_message = "localstack_endpoint must be loopback."
-  }
 }
-
