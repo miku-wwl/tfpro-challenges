@@ -42,21 +42,24 @@ output=text
 
 ### 2. 创建 AWS Credentials 文件
 
-`./aws/credentials` 文件必须只包含以下两个 profile 的凭证：
+`./aws/credentials` 文件必须只包含以下两个“源凭证” profile：
 
 ```sh
-[iam-access]
+[iam-source]
 aws_access_key_id=ACCESS-KEY-HERE
 aws_secret_access_key=SECRET-KEY-HERE
 
-[ec2-access]
+[ec2-source]
 aws_access_key_id=ACCESS-KEY-HERE
 aws_secret_access_key=SECRET-KEY-HERE
 ```
 
-`[iam-access]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-iam-user`。
+`[iam-source]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-iam-user`。
 
-`[ec2-access]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-ec2-user`。
+`[ec2-source]` profile 的 Access/Secret Key 应来自 base-folder 创建的 IAM 用户 `kplabs-ec2-user`。
+
+`iam-access` 和 `ec2-access` 是 AssumeRole 后使用的目标 profile，分别通过
+`source_profile = iam-source` 和 `source_profile = ec2-source` 使用上述源凭证。
 
 ### 3. 添加 Source Profile
 
