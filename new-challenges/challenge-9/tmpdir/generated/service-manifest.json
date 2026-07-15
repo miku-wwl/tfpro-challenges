@@ -1,0 +1,1 @@
+{"services":{"api":{"owner":"platform","port":8080,"tier":"critical"},"web":{"owner":"experience","port":3000,"tier":"standard"},"worker":{"owner":"platform","port":9090,"tier":"standard"}}}
