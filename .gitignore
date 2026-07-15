@@ -8,3 +8,5 @@
 
 # Local AWS credentials
 **/.aws/credentials
+
+tmp/
