@@ -1,0 +1,30 @@
+id: challenge-44
+title: Evolving a typed S3 object and IAM module contract
+difficulty: expert
+score: 95
+alignment: A
+timebox_minutes: 75
+terraform_version: "~> 1.6"
+provider_version: "~> 5.100"
+services: [iam, s3, sts]
+objectives:
+  - Normalize two strict JSON interface generations into one typed module input
+  - Preserve stable module and resource identity across interface evolution
+  - Audit a four-update V1-to-V2 saved-plan action map
+  - Verify stable IDs and remote S3/IAM semantics
+  - Detect and restore one detached IAM attachment
+constraints:
+  - Candidate contains Terraform HCL only
+  - No SNS, terraform_data, mock providers, overrides, or candidate scripts
+  - Managed types are limited to official S3 and IAM core resources
+  - Endpoints are explicit loopback HTTP root origins
+verification:
+  canonical_runs: 9
+  full_e2e: true
+  saved_plan_json: true
+  interface_upgrade: true
+  identity_stability: true
+  reorder_clean: true
+  drift_repair: true
+  reverse_destroy: true
+  zero_residue: true

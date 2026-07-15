@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "name": "api",
+      "owner": "Platform Team",
+      "object_key": "manifests/api.txt",
+      "payload": "api-release-v1"
+    }
+  ]
+}

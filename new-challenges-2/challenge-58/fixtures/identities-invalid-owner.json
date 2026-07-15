@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "identities": [
+    { "name": "api", "owner": "Platform Team", "actions": ["s3:GetObject"] },
+    { "name": "worker", "owner": "delivery", "actions": ["s3:GetObject"] }
+  ]
+}

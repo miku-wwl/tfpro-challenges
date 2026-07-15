@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "grants": [
+    { "id": "read-api", "artifact": "api" },
+    { "id": "read-ghost", "artifact": "ghost" }
+  ]
+}

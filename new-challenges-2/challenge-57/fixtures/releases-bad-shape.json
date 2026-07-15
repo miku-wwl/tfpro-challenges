@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "name": "api",
+      "owner": "platform",
+      "object_key": "manifests/api.txt",
+      "payload": "api-release-v1",
+      "region": "us-east-1"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+id: challenge-52
+title: Security Group Rules 从 Count 到稳定 Key 的零动作迁移
+score: 95
+alignment: A
+exam_timebox: 75m
+study_timebox: 135m
+runtime: docker-localstack
+terraform_version: "~> 1.6"
+services: [ec2, sts]
+concepts: [count-to-for-each, moved-blocks, module-refactor, csvdecode, saved-plan-json, drift-repair]
+invariants:
+  - migration_has_zero_remote_actions
+  - four_previous_addresses_are_exact
+  - csv_reorder_is_address_stable
+  - one_deleted_rule_repairs_one_stable_key
+  - external_vpc_remains_read_only
+  - final_residue_is_zero

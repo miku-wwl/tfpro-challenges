@@ -1,0 +1,25 @@
+{
+  "version": 4,
+  "terraform_version": "1.6.6",
+  "serial": 1,
+  "lineage": "60000000-0000-0000-0000-000000000005",
+  "outputs": {
+    "contract_version": { "value": 1, "type": "number" },
+    "run_id": { "value": "foreign99", "type": "string" },
+    "generation": { "value": 7, "type": "number" },
+    "foundation_contract_id": { "value": "042feed1f19c3497748965bd49773acfdb82bd72ad8ba565c2b1900e7913a577", "type": "string" },
+    "regional_contract_id": { "value": "5c469c5b3b0d0e1da39cf6b57cfebecd784daa7695eeb46955bd22bc288b7335", "type": "string" },
+    "primary_launch_template_id": { "value": "lt-11111111111111111", "type": "string" },
+    "dr_launch_template_id": { "value": "lt-22222222222222222", "type": "string" },
+    "primary_security_group_id": { "value": "sg-11111111111111111", "type": "string" },
+    "dr_security_group_id": { "value": "sg-22222222222222222", "type": "string" },
+    "primary_subnet_id": { "value": "subnet-11111111111111111", "type": "string" },
+    "dr_subnet_id": { "value": "subnet-22222222222222222", "type": "string" },
+    "primary_ami_id": { "value": "ami-11111111111111111", "type": "string" },
+    "dr_ami_id": { "value": "ami-22222222222222222", "type": "string" },
+    "primary_instance_type": { "value": "t3.micro", "type": "string" },
+    "dr_instance_type": { "value": "t3.small", "type": "string" },
+    "profile_name": { "value": "fixture01-profile", "type": "string" }
+  },
+  "resources": []
+}

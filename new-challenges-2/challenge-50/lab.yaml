@@ -1,0 +1,22 @@
+id: challenge-50
+title: 三 S3 State 合同链与双区域发布 Capstone
+score: 95
+alignment: A
+exam_timebox: 90m
+study_timebox: 170m
+runtime: localstack
+terraform_version: "1.6.6"
+services: [iam, s3, ec2, sts]
+concepts:
+  - three-partial-s3-backends
+  - chained-terraform-remote-state
+  - contract-fingerprint
+  - aliased-provider-routing
+  - official-ec2-replacement-semantics
+  - ordered-saved-destroy
+invariants:
+  - identity_platform_and_workload_own_independent_state
+  - downstream_roots_consume_only_versioned_outputs
+  - platform_fingerprint_matches_the_exact_identity_contract
+  - release_upgrade_replaces_only_two_workload_instances
+  - destroy_order_is_workload_platform_identity

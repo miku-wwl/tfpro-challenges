@@ -1,0 +1,10 @@
+variable "primary_region" { type = string }
+variable "dr_region" { type = string }
+variable "localstack_endpoint" { type = string }
+variable "foundation_state_path" { type = string }
+variable "expected_run_id" { type = string }
+variable "minimum_generation" { type = number }
+variable "primary_subnet_id" { type = string }
+variable "dr_subnet_id" { type = string }
+variable "primary_ami_pattern" { type = string }
+variable "dr_ami_pattern" { type = string }

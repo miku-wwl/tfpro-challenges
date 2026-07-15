@@ -1,0 +1,30 @@
+id: challenge-45
+title: Partial S3 backends and a remote-state release contract
+difficulty: expert
+score: 95
+alignment: A
+timebox_minutes: 80
+terraform_version: "~> 1.6"
+provider_version: "~> 5.100"
+services: [s3, sts]
+objectives:
+  - Migrate producer state between injected S3 backend keys
+  - Publish a minimal order-independent release contract
+  - Consume only that contract through S3 terraform_remote_state
+  - Materialize real receipt objects and propagate a V1-to-V2 release
+  - Repair one precise remote receipt drift before reverse destroy
+constraints:
+  - Candidate contains Terraform HCL only
+  - Both roots declare partial S3 backends
+  - Managed AWS types are limited to S3 bucket and object
+  - No terraform_data, mocks, overrides, or candidate scripts
+verification:
+  canonical_runs: 7
+  full_e2e: true
+  state_migration: true
+  remote_state_contract: true
+  saved_plan_json: true
+  reorder_clean: true
+  drift_repair: true
+  reverse_destroy: true
+  zero_residue: true

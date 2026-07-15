@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "release": "v1",
+  "artifacts": [
+    {
+      "name": "worker",
+      "key": "releases/worker.txt",
+      "content": "worker release payload v1",
+      "owner": "operations"
+    },
+    {
+      "name": "api",
+      "key": "releases/api.txt",
+      "content": "api release payload v1",
+      "owner": "platform"
+    }
+  ]
+}

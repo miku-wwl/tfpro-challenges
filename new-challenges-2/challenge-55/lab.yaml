@@ -1,0 +1,23 @@
+id: challenge-55
+title: LocalStack 可执行的 EC2/LT 滚动 Fleet 合同
+score: 95
+alignment: A
+exam_timebox: 75m
+study_timebox: 130m
+runtime: docker-localstack-community
+terraform_version: "~> 1.6"
+services: [ec2, sts]
+concepts:
+  - stable-for-each
+  - launch-template-versioning
+  - create-before-destroy
+  - provider-native-replacement
+  - scale-out-and-scale-in
+  - saved-plan-json
+  - drift-recovery
+invariants:
+  - localstack_community_asg_license_gap_is_not_mocked
+  - service_and_node_business_keys_define_addresses
+  - boot_contract_changes_replace_instances_create_before_destroy
+  - external_network_is_read_only
+  - final_plan_is_clean_and_run_scoped_residue_is_zero

@@ -1,0 +1,9 @@
+variable "route" { type = string }
+variable "region" { type = string }
+variable "run_id" { type = string }
+variable "image_name" { type = string }
+variable "subnet_id" { type = string }
+variable "instance_type" { type = string }
+variable "iam_instance_profile" { type = string }
+variable "owner" { type = string }
+variable "common_tags" { type = map(string) }

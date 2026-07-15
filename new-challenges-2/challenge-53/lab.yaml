@@ -1,0 +1,17 @@
+id: challenge-53
+title: 双 Region Provider Alias 与六地址零动作模块化迁移
+score: 95
+alignment: A
+exam_timebox: 85m
+study_timebox: 150m
+runtime: docker-localstack
+terraform_version: "~> 1.6"
+services: [ec2, iam, sts]
+concepts: [provider-aliases, module-provider-injection, moved-blocks, multi-region, launch-template, saved-plan-json]
+invariants:
+  - primary_and_dr_use_distinct_provider_instances
+  - identity_is_shared_once
+  - migration_has_six_previous_addresses_and_zero_remote_actions
+  - region_array_reorder_is_stable
+  - dr_drift_repairs_only_dr_security_group
+  - final_dual_region_residue_is_zero

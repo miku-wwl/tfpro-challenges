@@ -1,0 +1,2 @@
+fleet_id,environment,subnet_candidates,instance_type,enabled,owner,placement_epoch
+api,prod,public-a|private-a,invalid type,true,edge,1

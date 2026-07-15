@@ -1,0 +1,29 @@
+id: challenge-42
+title: Auditable three-slot S3 and IAM provider routing
+difficulty: expert
+score: 95
+alignment: A
+timebox_minutes: 70
+terraform_version: "~> 1.6"
+provider_version: "~> 5.100"
+services: [iam, s3, sts]
+objectives:
+  - Normalize and validate a three-route JSON contract
+  - Declare and explicitly map primary, DR, and audit provider slots
+  - Audit provider_config_key assignments from saved-plan JSON
+  - Prove region routing and caller identity against LocalStack
+  - Repair one precise IAM tag drift before audited destroy
+constraints:
+  - Candidate contains Terraform HCL only
+  - Managed types are limited to S3 bucket and IAM role
+  - No mock providers, overrides, VPC resources, or candidate scripts
+  - Endpoints are explicit loopback HTTP root origins
+verification:
+  canonical_runs: 7
+  full_e2e: true
+  saved_plan_json: true
+  provider_routing_audit: true
+  reorder_clean: true
+  drift_repair: true
+  reverse_destroy: true
+  zero_residue: true

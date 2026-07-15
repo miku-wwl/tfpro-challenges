@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    { "name": "api", "artifact": "api", "instance_type": "t3.micro" },
+    { "name": "api", "artifact": "worker", "instance_type": "t3.small" }
+  ]
+}

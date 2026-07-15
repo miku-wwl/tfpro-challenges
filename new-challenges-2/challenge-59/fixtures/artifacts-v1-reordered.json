@@ -1,0 +1,8 @@
+{
+  "artifacts": [
+    { "content": "worker artifact v1", "owner": "operations", "key": "releases/worker.txt", "name": "worker" },
+    { "owner": "platform", "name": "api", "content": "api artifact v1", "key": "releases/api.txt" }
+  ],
+  "revision": "2026.07.1",
+  "schema_version": 1
+}

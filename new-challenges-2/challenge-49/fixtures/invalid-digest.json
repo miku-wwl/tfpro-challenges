@@ -1,0 +1,1 @@
+{"schema_version":1,"fleets":[{"name":"api","location":"primary","release":"2026.07.1","capacity":1,"instance_type":"t3.micro","artifact_sha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}

@@ -1,0 +1,22 @@
+id: challenge-49
+title: 双区域 Launch Template 发布与受控替换
+score: 95
+alignment: A
+exam_timebox: 75m
+study_timebox: 140m
+runtime: localstack
+terraform_version: "1.6.6"
+services: [ec2, iam, sts]
+concepts:
+  - stable-fleet-and-replica-identity
+  - provider-alias-routing
+  - injected-subnet-and-image-contract
+  - launch-template-replacement-trigger
+  - saved-plan-json-audit
+  - drift-recovery
+invariants:
+  - candidate_uses_only_data_aws_subnet
+  - release_change_replaces_only_its_existing_replica
+  - capacity_growth_preserves_existing_replica_addresses
+  - catalog_reordering_is_a_no_op
+  - destroy_leaves_zero_localstack_residue

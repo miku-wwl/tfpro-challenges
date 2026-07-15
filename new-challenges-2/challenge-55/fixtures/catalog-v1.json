@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "release_version": "2026.07.1",
+  "services": [
+    { "name": "api", "instance_type": "t3.micro" },
+    { "name": "worker", "instance_type": "t3.small" }
+  ],
+  "nodes": [
+    { "node_id": "api-a", "service": "api" },
+    { "node_id": "worker-a", "service": "worker" }
+  ]
+}

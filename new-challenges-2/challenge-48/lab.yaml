@@ -1,0 +1,22 @@
+id: challenge-48
+title: 双 S3 State 制品合同与 IAM 消费者
+score: 95
+alignment: A
+exam_timebox: 75m
+study_timebox: 140m
+runtime: localstack
+terraform_version: "1.6.6"
+services: [s3, iam, sts]
+concepts:
+  - partial-s3-backend
+  - terraform-remote-state
+  - versioned-output-contract
+  - iam-policy-document
+  - saved-plan-json-audit
+  - ordered-destroy
+invariants:
+  - foundation_and_delivery_have_independent_s3_state
+  - delivery_consumes_only_foundation_outputs
+  - manifest_reordering_is_a_no_op
+  - stale_revision_is_rejected
+  - delivery_is_destroyed_before_foundation

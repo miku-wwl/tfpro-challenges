@@ -1,0 +1,9 @@
+{
+  "contract_version": 1,
+  "workload": "AUDIT!",
+  "bucket_suffix": "Bad_Suffix",
+  "secret": "short",
+  "statements": [
+    { "key": "BAD!", "scope": "global", "actions": ["iam:*", "s3:DeleteBucket"] }
+  ]
+}

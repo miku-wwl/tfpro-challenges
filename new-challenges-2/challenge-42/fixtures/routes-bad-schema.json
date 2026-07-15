@@ -1,0 +1,1 @@
+{"schema_version":2,"routes":[{"name":"primary","bucket_suffix":"primary-store","role_suffix":"primary-role","enabled":true}]}

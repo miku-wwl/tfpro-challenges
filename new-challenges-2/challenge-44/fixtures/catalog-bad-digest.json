@@ -1,0 +1,1 @@
+{"schema_version":2,"bundles":[{"name":"api","owner":"platform","artifact":{"key":"releases/api.txt","payload":"api-release-v2","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"identity":{"actions":["s3:GetObject"]}}]}

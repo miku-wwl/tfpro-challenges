@@ -1,0 +1,4 @@
+key,description,protocol,from_port,to_port,cidr
+admin,Administrative SSH,tcp,22,22,10.52.0.0/24
+api,Public API TLS,tcp,8443,8443,10.52.10.0/24
+metrics,Prometheus metrics,tcp,9090,9090,10.52.20.0/24

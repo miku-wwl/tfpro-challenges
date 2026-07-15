@@ -1,0 +1,1 @@
+{"schema_version":1,"entries":[{"id":"Artifact Reader","owner":"platform-team","trust_services":["ec2.amazonaws.com"],"statements":[{"sid":"ReadArtifacts","effect":"Allow","actions":["s3:GetObject"],"resources":["arn:aws:s3:::tfpro-c43-artifacts/*"]}]}]}

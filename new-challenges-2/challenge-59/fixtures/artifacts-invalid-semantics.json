@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "revision": "v-one",
+  "artifacts": [
+    { "name": "api", "key": "../api.txt", "owner": "Platform Team", "content": "api artifact v1" },
+    { "name": "worker", "key": "releases/worker.txt", "owner": "operations", "content": "" }
+  ]
+}

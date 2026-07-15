@@ -1,0 +1,7 @@
+{
+  "contract_version": 2,
+  "regions": [
+    { "key": "primary", "region": "eu-mars-1", "instance_type": "m9.mega", "ami_pattern": "" },
+    { "key": "dr", "region": "us-east-1", "instance_type": "t3.nano", "ami_pattern": "bad" }
+  ]
+}

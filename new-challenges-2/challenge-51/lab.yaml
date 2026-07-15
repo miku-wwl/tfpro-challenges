@@ -1,0 +1,16 @@
+id: challenge-51
+title: Declarative Import 与 Moved 双路径零替换接管
+score: 95
+alignment: A
+exam_timebox: 80m
+study_timebox: 140m
+runtime: docker-localstack
+terraform_version: "~> 1.6"
+services: [ec2, iam, sts]
+concepts: [import-blocks, moved-blocks, module-refactor, zero-replacement, state-lineage, saved-plan-json]
+invariants:
+  - empty_state_uses_three_declarative_imports
+  - legacy_state_uses_three_reviewable_moved_blocks
+  - both_takeover_paths_have_zero_remote_mutation
+  - external_network_remains_read_only
+  - drift_is_repaired_and_final_residue_is_zero

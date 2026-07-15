@@ -1,0 +1,10 @@
+variable "run_id" { type = string }
+variable "region_key" { type = string }
+variable "subnet_id" { type = string }
+variable "ami_pattern" { type = string }
+variable "instance_type" { type = string }
+variable "bucket_name" { type = string }
+variable "artifact_key" { type = string }
+variable "artifact_sha256" { type = string }
+variable "generation" { type = number }
+variable "profile_name" { type = string }

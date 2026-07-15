@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "routes": [
+    { "name": "primary", "owner": "bad_owner" },
+    { "name": "audit", "owner": "security" }
+  ]
+}

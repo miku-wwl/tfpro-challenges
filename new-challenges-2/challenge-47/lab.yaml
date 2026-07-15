@@ -1,0 +1,22 @@
+id: challenge-47
+title: 无 Mock 的双区域 Provider 路由与真实数据源
+score: 95
+alignment: A
+exam_timebox: 65m
+study_timebox: 125m
+runtime: localstack
+terraform_version: "1.6.6"
+services: [ec2, iam, sts]
+concepts:
+  - aliased-provider-routing
+  - reusable-regional-module
+  - ami-and-subnet-data-sources
+  - stable-json-contract
+  - saved-plan-json-audit
+  - real-drift-recovery
+invariants:
+  - canonical_tests_use_no_mock_or_override
+  - primary_and_audit_use_distinct_provider_slots
+  - grader_injects_networks_and_registers_amis
+  - catalog_reordering_is_a_no_op
+  - destroy_leaves_zero_localstack_residue

@@ -1,0 +1,9 @@
+{
+  "artifact": {
+    "sha256": "0094eec37cc9364a5d4e2e821f7c35c55c9182facc119795b91a51bd1648486e",
+    "content": "tfpro-release-v7",
+    "key": "releases/app-v7.tgz"
+  },
+  "generation": 7,
+  "contract_version": 1
+}
