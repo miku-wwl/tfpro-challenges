@@ -161,6 +161,17 @@ aws s3api head-bucket `
 
 > [!TIP]
 > 确保 `vpc.tfstate` 的 output 包含两个子网的 `subnet_ids`。
+>
+> 如果需要同时输出两组子网，使用 `concat()` 合并两个列表推导式：
+>
+> ```hcl
+> output "subnet_ids" {
+>   value = concat(
+>     [for subnet in aws_subnet.challenge_5 : subnet.id],
+>     [for subnet in aws_subnet.random : subnet.id]
+>   )
+> }
+> ```
 
 ### 任务 11：销毁基础设施
 
