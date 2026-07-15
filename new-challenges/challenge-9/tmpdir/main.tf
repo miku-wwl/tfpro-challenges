@@ -35,9 +35,13 @@ resource "terraform_data" "retired" {
   }
 }
 
-resource "local_file" "inventory" {
+resource "local_file" "manifest" {
   filename        = var.manifest_path
   content         = local.manifest_content
   file_permission = "0644"
 }
 
+moved {
+  from = local_file.inventory
+  to = local_file.manifest
+}
