@@ -66,6 +66,16 @@ aws_secret_access_key=SECRET-KEY-HERE
 
 `default` profile 的凭证位于 base-folder 的 `default-creds.txt` 文件中。
 
+> [!NOTE]
+> 术语说明：`readonly-access`、`iam-access` 和 `ec2-access` 是 AWS CLI
+> profile 名称，不是 IAM User 或 IAM Role。`source_profile` 指向提供长期
+> Access Key/Secret Key 的来源 profile；`role_arn` 指向要 Assume 的目标 IAM Role。
+>
+> 本实验中，`readonly-access` 使用 `default` profile 的凭证来 Assume
+> `ReadOnlyRole`。`default` 的凭证来自 `base-folder/default-creds.txt`，并不表示
+> `default` 去 Assume `readonly-access`。实际考试中应以题目给出的凭证与 profile
+> 关系为准，不要自行假设 profile 名称或 IAM User 的对应关系。
+
 ### 4. 修改 `challenge-6.tf`
 
 * `aws_iam_role` 资源类型必须使用 `[iam-access]` profile。
