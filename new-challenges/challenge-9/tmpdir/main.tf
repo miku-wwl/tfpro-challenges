@@ -45,3 +45,17 @@ moved {
   from = local_file.inventory
   to = local_file.manifest
 }
+
+resource "terraform_data" "guardian" {
+  input = {
+    name   = "ops-guardian"
+    policy = "retain"
+  }
+
+  # TODO: 添加销毁保护，并通过 import block 接管既有 ID。
+}
+
+import {
+  to = terraform_data.guardian
+  id = "ops-guardian-v1"
+}
