@@ -6,18 +6,18 @@ locals {
   csv_rules = csvdecode(file("${path.module}/sg.csv"))
 
   cidr_map = {
-    app        = data.aws_subnet.app.cidr_block
-    database   = data.aws_subnet.database.cidr_block
-    monitoring = data.aws_subnet.central.cidr_block
+    app          = data.aws_subnet.app.cidr_block
+    database     = data.aws_subnet.database.cidr_block
+    monitoring   = data.aws_subnet.central.cidr_block
     "anti-virus" = data.aws_subnet.central.cidr_block
   }
 
   inbound_rules = [
     for rule in local.csv_rules : {
-      cidr_ipv4   = local.cidr_map[rule.cidr_block]
-      protocol    = rule.protocol
-      from_port   = tonumber(split("-", rule.port)[0])
-      to_port     = tonumber(split("-", rule.port)[length(split("-", rule.port)) - 1])
+      cidr_ipv4 = local.cidr_map[rule.cidr_block]
+      protocol  = rule.protocol
+      from_port = tonumber(split("-", rule.port)[0])
+      to_port   = tonumber(split("-", rule.port)[length(split("-", rule.port)) - 1])
     }
     if rule.direction == "in"
   ]
@@ -31,4 +31,14 @@ resource "aws_vpc_security_group_ingress_rule" "rules" {
   from_port         = local.inbound_rules[count.index].from_port
   ip_protocol       = local.inbound_rules[count.index].protocol
   to_port           = local.inbound_rules[count.index].to_port
+}
+
+output "filtered_data" {
+  value = {
+    for index, rule in local.inbound_rules : tostring(index) => {
+      cidr_block = rule.cidr_ipv4
+      from_port  = rule.from_port
+      to_port    = rule.to_port
+    }
+  }
 }
