@@ -38,6 +38,14 @@
 7. 迁移后确认 plan 幂等；再运行漂移脚本，观察 plan，apply 恢复文件内容，最后再次
    得到零变更 plan。
 
+#### Task 7 漂移验证报告
+
+- 初始 `terraform plan -detailed-exitcode` 返回 `0`，基础设施与配置一致。
+- 运行 `fixtures/drift.ps1` 后，脚本删除了 `generated/service-manifest.json`，模拟外部漂移。
+- 再次运行 plan 返回退出码 `2`，检测到 `local_file.manifest` 被删除，并计划重新创建。
+- 执行 `terraform apply -auto-approve` 后，manifest 文件恢复。
+- 最后再次执行 plan，输出 `No changes`，Task 7 验证通过。
+
 `starter/` 中保留了不稳定的数字 key、缺失的 import/moved/lifecycle 等 TODO。你可以
 修改其中任意 `.tf`，但不要修改 `tests/` 或 legacy fixture。
 
