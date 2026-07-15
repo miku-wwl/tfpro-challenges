@@ -15,35 +15,32 @@ resource "terraform_data" "service" {
 
 moved {
   from = terraform_data.workload[0]
-  to = terraform_data.service["api"]
+  to   = terraform_data.service["api"]
 }
 
 moved {
   from = terraform_data.workload[1]
-  to = terraform_data.service["web"]
+  to   = terraform_data.service["web"]
 }
 
 moved {
   from = terraform_data.workload[2]
-  to = terraform_data.service["worker"]
-}
-
-resource "terraform_data" "retired" {
-  input = {
-    name   = "legacy-reporter"
-    status = "retired-but-retained"
-  }
+  to   = terraform_data.service["worker"]
 }
 
 resource "local_file" "manifest" {
   filename        = var.manifest_path
   content         = local.manifest_content
   file_permission = "0644"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 moved {
   from = local_file.inventory
-  to = local_file.manifest
+  to   = local_file.manifest
 }
 
 resource "terraform_data" "guardian" {
@@ -52,7 +49,9 @@ resource "terraform_data" "guardian" {
     policy = "retain"
   }
 
-  # TODO: 添加销毁保护，并通过 import block 接管既有 ID。
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 import {

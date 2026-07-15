@@ -32,7 +32,9 @@
 > [!NOTE]
 > `terraform_data` 是 Terraform 内置的 state 资源，不创建或查询云端对象，因此其 import ID 可以由配置指定。本题必须使用题目要求的 `ops-guardian-v1`，不能据此推断 AWS 等云资源也可以随意填写 ID；云资源必须先真实存在，再使用对应的真实资源 ID 导入。
 5. 使用 `terraform state rm terraform_data.retired` 停止管理退役对象。不要 destroy。
-6. 为 guardian 添加销毁保护，并保持 manifest 的安全替换策略。
+6. 为 guardian 添加销毁保护：在 `terraform_data.guardian` 中使用
+   `lifecycle { prevent_destroy = true }`；为 manifest 保持安全替换策略：在
+   `local_file.manifest` 中使用 `lifecycle { create_before_destroy = true }`。
 7. 迁移后确认 plan 幂等；再运行漂移脚本，观察 plan，apply 恢复文件内容，最后再次
    得到零变更 plan。
 
