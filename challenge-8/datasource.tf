@@ -27,10 +27,10 @@ output "subnet_ids" {
     id   = data.aws_subnet.app.id
     name = data.aws_subnet.app.tags["Name"]
     }, {
-    id = data.aws_subnet.database.id
+    id   = data.aws_subnet.database.id
     name = data.aws_subnet.database.tags["Name"]
     }, {
-    id = data.aws_subnet.central.id
+    id   = data.aws_subnet.central.id
     name = data.aws_subnet.central.tags["Name"]
   }]
 }

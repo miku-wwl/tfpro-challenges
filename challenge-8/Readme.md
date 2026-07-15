@@ -25,6 +25,9 @@
 
 ### 任务 3：创建 Security Group
 
+> [!NOTE]
+> 从本任务开始，Task 3、Task 4 和 Task 5 均在最外层 `challenge-8` 根目录完成，不在 `base-folder` 中修改。`base-folder` 仅用于 Task 1 创建基础资源。
+
 在 `central-vpc` 中创建名为 `kplabs-sg` 的 Security Group。
 
 ### 任务 4：创建 VPC Security Group Ingress Rule
@@ -42,6 +45,9 @@
 | `anti-virus` | `central-subnet` 的 CIDR block |
 
 ### 任务 5：输出值
+
+> [!NOTE]
+> `split("-", rule.port)` 用于拆分 CSV 中的端口值。单端口如 `80` 会得到 `[`80`]`，端口范围如 `8081-8085` 会得到 `[`8081`, `8085`]`。因此可以取第一个元素作为 `from_port`，最后一个元素作为 `to_port`，并使用 `tonumber()` 转换为数字。
 
 使用 output 按照以下格式输出数据：
 
