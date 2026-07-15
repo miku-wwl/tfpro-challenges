@@ -96,6 +96,21 @@ aws_secret_access_key=SECRET-KEY-HERE
 
 移除代码或输出中出现的所有 deprecated 警告。
 
+> [!NOTE]
+> 如果警告指向 `aws_iam_role` 中的 `managed_policy_arns`，请删除该参数，
+> 并使用独立的 `aws_iam_role_policy_attachment` 资源将托管 Policy 附加到 Role：
+>
+> ```hcl
+> resource "aws_iam_role_policy_attachment" "cw_full_access" {
+>   role       = aws_iam_role.cw_full_access.name
+>   policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+>   provider   = aws.iam_access
+> }
+> ```
+>
+> 修改后运行 `terraform plan`，确认没有 deprecated warning，并确认 IAM Role
+> 没有被计划重新创建。
+
 ### 7. 销毁基础设施
 
 删除本实验中创建的所有基础设施。
