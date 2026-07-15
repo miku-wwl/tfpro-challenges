@@ -88,6 +88,18 @@ instance_count_by_type = {
 }
 ```
 
+> [!NOTE]
+> 如果实例类型固定，可以分别筛选每种类型，再使用 `length()` 计数，写法更直观：
+>
+> ```hcl
+> output "instance_count_by_type" {
+>   value = {
+>     micro = length([for row in local.ec2_csv : row if row.instance_type == "micro"])
+>     nano  = length([for row in local.ec2_csv : row if row.instance_type == "nano"])
+>   }
+> }
+> ```
+
 ### 7. List of Maps
 
 创建名为 `instance_details` 的 **output value**，生成一个 map 列表，每个 map 包含相应实例的 `team` 和 `type` 属性。
