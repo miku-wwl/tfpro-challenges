@@ -5,12 +5,27 @@ locals {
   })
 }
 
-resource "terraform_data" "workload" {
-  count = length(local.service_names)
+resource "terraform_data" "service" {
+  for_each = toset(local.service_names)
 
-  input = merge(var.catalog[local.service_names[count.index]], {
-    name = local.service_names[count.index]
+  input = merge(var.catalog[each.value], {
+    name = each.value
   })
+}
+
+moved {
+  from = terraform_data.workload[0]
+  to = terraform_data.service["api"]
+}
+
+moved {
+  from = terraform_data.workload[1]
+  to = terraform_data.service["web"]
+}
+
+moved {
+  from = terraform_data.workload[2]
+  to = terraform_data.service["worker"]
 }
 
 resource "terraform_data" "retired" {
