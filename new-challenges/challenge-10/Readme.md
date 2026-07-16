@@ -22,6 +22,22 @@ child module，并把接口升级为 v2：以对象接收服务参数、支持 o
 1. 在一个空工作目录应用 `fixtures/legacy`，得到三个旧地址：
    `terraform_data.service[0..2]`。
 2. 把资源实现迁入 `modules/service`，root 以服务名 map 调用模块。
+
+> [!NOTE]
+> 如果输入变量是 `list(object)`，不能直接用于 `for_each`，也不能直接使用
+> `toset(var.services)`，因为 Terraform 的 `for_each` 不接受对象集合。
+> 可以先转换为以服务名为 key 的 map：
+>
+> ```hcl
+> for_each = {
+>   for service in var.services :
+>   service.name => service
+> }
+> ```
+>
+> 这样会生成稳定的模块地址，例如
+> `module.service["api"]`、`module.service["web"]` 和
+> `module.service["worker"]`。
 3. 将 child module 接口升级到 v2：
    - `service` 对象包含 port、owner、tier 和 optional healthcheck；
    - `context` 对象包含 environment 与 tags；
