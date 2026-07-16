@@ -34,7 +34,7 @@ resource "terraform_data" "service" {
     }
 
     postcondition {
-      condition     = self.output.endpoint  == "${lower(each.key)}:${each.value.port}"
+      condition     = self.output.endpoint == "${lower(each.key)}:${each.value.port}"
       error_message = "The generated endpoint is not normalized."
     }
   }
@@ -42,7 +42,7 @@ resource "terraform_data" "service" {
 
 check "capacity_budget" {
   assert {
-    condition     = (
+    condition = (
       sum([
         for service in local.services : service.capacity
       ]) <= var.policy.max_total_capacity

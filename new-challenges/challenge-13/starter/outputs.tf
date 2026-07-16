@@ -9,12 +9,26 @@ output "service_profiles" {
 }
 
 output "services_by_owner" {
-  # TODO: group and sort service keys by owner.
-  value = {}
+  value = {
+    for owner in distinct([
+      for service in values(local.services) : service.owner
+    ]) :
+    owner => sort([
+      for name, service in local.services :
+      name if service.owner == owner
+    ])
+  }
 }
 
 output "deployment_tokens" {
-  # TODO: derive sha256 tokens from token_salt, stable service key, and owner seed.
-  # Mark this output sensitive.
-  value = {}
+  value = {
+    for name, service in local.services :
+    name => sha256(join(":", [
+      var.token_salt,
+      name,
+      local.owners[service.owner].token_seed
+    ]))
+  }
+
+  sensitive = true
 }
