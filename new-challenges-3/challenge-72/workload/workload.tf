@@ -1,5 +1,4 @@
 terraform {
-  required_version = "~> 1.6.0"
 
   # Task 3：在这里添加 partial S3 backend；不要把 bucket、key 或凭证写死。
 

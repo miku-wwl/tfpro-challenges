@@ -90,7 +90,6 @@ $awsSchema.resource_schemas.PSObject.Properties.Name -contains 'aws_s3_bucket'
 
 编辑 `modules/release/main.tf`，在文件顶部添加 `terraform` block：
 
-- `required_version = "~> 1.6.0"`；
 - `required_providers.aws.source = "hashicorp/aws"`；
 - `required_providers.aws.version = "5.80.0"`。
 
