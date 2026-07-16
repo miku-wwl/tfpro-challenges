@@ -1,4 +1,3 @@
-# This is the old baseline. Upgrade it to the release-v2 source and interface.
 module "release" {
   source = "../fixtures/modules/release-v2"
 
@@ -7,7 +6,20 @@ module "release" {
 }
 
 resource "terraform_data" "contract" {
-  # TODO: consume module.release.manifest and enforce schema v2 with lifecycle
-  # precondition/postcondition assertions.
-  input = module.release.legacy_release
+  input = module.release.manifest
+
+  lifecycle {
+    precondition {
+      condition     = module.release.manifest.schema_version == 2
+      error_message = "The release manifest must use schema version 2."
+    }
+
+    postcondition {
+      condition = (
+        self.output.schema_version == 2 &&
+        toset(keys(self.output.artifacts)) == var.release_channels
+      )
+      error_message = "The artifact set must match release_channels."
+    }
+  }
 }
