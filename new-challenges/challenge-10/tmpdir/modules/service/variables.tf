@@ -1,17 +1,16 @@
 variable "service" {
   type = object({
-    name  = string
-    port  = number
-    owner = string
-    tier  = string
+    name        = string
+    port        = number
+    owner       = string
+    tier        = string
+    healthcheck = optional(string)
   })
 }
 
-variable "environment" {
-  type = string
+variable "context" {
+  type = object({
+    environment = string
+    tags        = map(string)
+  })
 }
-
-variable "common_tags" {
-  type = map(string)
-}
-

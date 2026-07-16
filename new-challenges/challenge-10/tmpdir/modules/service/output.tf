@@ -1,5 +1,9 @@
-resource "terraform_data" "this" {
-  input = {
+output "contract_version" {
+  value = 2
+}
+
+output "manifest" {
+  value = {
     name        = var.service.name
     port        = var.service.port
     owner       = var.service.owner
@@ -7,4 +11,8 @@ resource "terraform_data" "this" {
     environment = var.context.environment
     tags        = var.context.tags
   }
+}
+
+output "healthcheck" {
+  value = var.service.healthcheck
 }

@@ -38,10 +38,31 @@ child module，并把接口升级为 v2：以对象接收服务参数、支持 o
 > 这样会生成稳定的模块地址，例如
 > `module.service["api"]`、`module.service["web"]` 和
 > `module.service["worker"]`。
-3. 将 child module 接口升级到 v2：
-   - `service` 对象包含 port、owner、tier 和 optional healthcheck；
-   - `context` 对象包含 environment 与 tags；
-   - 输出 `contract_version = 2`、manifest 与 healthcheck。
+3. 将 `modules/service` 的 child module 接口升级到 v2：
+   - root 每次调用模块时传入一个 `service` 对象，至少包含 `name`、`port`、
+     `owner`、`tier`，并支持可选的 `healthcheck`；
+   - root 传入一个 `context` 对象，其中包含 `environment` 和 `tags`，不要再将
+     这两个值作为两个独立变量传入；
+   - child module 内部使用 `terraform_data.this` 保存当前服务的配置字段，至少包括
+     `name`、`port`、`owner`、`tier`、`environment` 和 `tags`；这里的“服务数据”
+     就是这些输入配置值，不是额外创建的云服务；
+   - child module 提供以下 outputs：
+     - `contract_version`：固定为数字 `2`；
+     - `manifest`：输出当前服务的 name、port、owner、tier、environment 和 tags；
+     - `healthcheck`：输出服务的 healthcheck，未配置时必须为 `null`。
+
+   升级接口时必须保持 `terraform_data.this.input` 中原有的服务字段和数值不变，
+   以便后续 `moved` block 迁移时不会触发资源 replacement。
+
+> [!NOTE]
+> Terraform 的条件表达式语法是：
+>
+> ```hcl
+> condition ? true_value : false_value
+> ```
+>
+> 不要写成 `if condition ? ...`。如果需要输出真正的空值，应使用 `null`，不要使用
+> 字符串 `"null"`；例如可选的 `healthcheck` 未配置时应输出 `null`。
 4. 为每个旧地址写显式 moved block，目标为
    `module.service["name"].terraform_data.this`。
 5. 保持底层 `terraform_data.input` 完全一致，避免借“接口升级”偷偷修改实例。

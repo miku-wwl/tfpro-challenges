@@ -15,27 +15,29 @@
 
 module "service" {
   for_each = {
-    for service in var.services: service.name => service
+    for service in var.services : service.name => service
   }
 
   source = "./modules/service"
 
-  service     = each.value
-  environment = var.environment
-  common_tags = var.common_tags
+  service = each.value
+  context = {
+    environment = var.environment
+    tags        = var.common_tags
+  }
 }
 
 moved {
-  from = terraform_data.service[0]
-  to = module.service["api"].terraform_data.service
+  from = module.service["api"].terraform_data.service
+  to   = module.service["api"].terraform_data.this
 }
 
 moved {
-  from = terraform_data.service[1]
-  to = module.service["web"].terraform_data.service
+  from = module.service["web"].terraform_data.service
+  to   = module.service["web"].terraform_data.this
 }
 
 moved {
-  from = terraform_data.service[2]
-  to = module.service["worker"].terraform_data.service
+  from = module.service["worker"].terraform_data.service
+  to   = module.service["worker"].terraform_data.this
 }
