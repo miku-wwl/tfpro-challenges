@@ -15,14 +15,33 @@ provider "aws" {
 data "aws_subnet" "selected" {
   for_each = var.subnet_tiers
 
-  # TODO 1: query each subnet by the Network and Tier tags.
+  filter {
+    name   = "tag:Network"
+    values = [var.network_name]
+  }
+
+  filter {
+    name   = "tag:Tier"
+    values = [each.value]
+  }
 }
 
 locals {
   raw_rules = csvdecode(file(var.rules_file))
 
-  # TODO 2: normalize number/bool/string fields and retain enabled ingress rows for the target environment.
-  selected_rules = []
+  selected_rules = [for rule in local.raw_rules : {
+    service     = rule.service
+    environment = rule.environment
+    subnet_tier = rule.subnet_tier
+    direction   = rule.direction
+    protocol    = rule.protocol
+    from_port   = tonumber(rule.from_port)
+    to_port     = tonumber(rule.to_port)
+    source      = rule.source
+    enabled     = tobool(rule.enabled)
+    owner       = rule.owner
+    } if tobool(rule.enabled) && rule.direction == "ingress" && rule.environment == var.target_environment
+  ]
 
   # TODO 3: key rules by semantic identity and services by service name; resolve source aliases.
   ingress_rules = {}
