@@ -1,10 +1,9 @@
 module "replicated_storage" {
   source = "./modules/replicated-storage"
 
-  # TODO 1: route the two child provider slots to their matching root aliases.
   providers = {
-    aws.primary  = aws.recovery
-    aws.recovery = aws.primary
+    aws.primary  = aws.primary
+    aws.recovery = aws.recovery
   }
 
   name_prefix     = var.name_prefix

@@ -5,8 +5,8 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.100.0"
-      # TODO 2: declare both provider slots used by this module.
-      configuration_aliases = [aws.primary]
+
+      configuration_aliases = [aws.primary, aws.recovery]
     }
   }
 }
