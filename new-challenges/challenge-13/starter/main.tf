@@ -2,9 +2,16 @@ locals {
   owners = jsondecode(file("${path.module}/${var.owners_file}"))
   rows   = csvdecode(file("${path.module}/${var.services_file}"))
 
-  # TODO: filter by environment/enabled and explicitly type numeric/boolean data.
   services = {
-    for row in local.rows : row.name => row
+    for row in local.rows : row.name => {
+      name        = row.name
+      environment = row.environment
+      owner       = row.owner
+      port        = tonumber(row.port)
+      enabled     = tobool(row.enabled)
+      tier        = row.tier
+      capacity    = tonumber(row.capacity)
+    } if row.environment == var.target_environment && tobool(row.enabled)
   }
 }
 

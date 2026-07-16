@@ -2,7 +2,10 @@ variable "target_environment" {
   type    = string
   default = "prod"
 
-  # TODO: accept only dev or prod.
+  validation {
+    condition     = var.target_environment == "prod" || var.target_environment == "dev"
+    error_message = "accept only dev or prod."
+  }
 }
 
 variable "services_file" {
@@ -25,7 +28,10 @@ variable "policy" {
     max_total_capacity = 10
   }
 
-  # TODO: validate a positive budget and a non-empty allowed tier set.
+  validation {
+    condition     = var.policy.max_total_capacity > 0 && length(var.policy.allowed_tiers) > 0
+    error_message = "a positive budget and a non-empty allowed tier set"
+  }
 }
 
 variable "token_salt" {

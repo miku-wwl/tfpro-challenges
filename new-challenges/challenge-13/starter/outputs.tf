@@ -1,6 +1,5 @@
 output "service_keys" {
-  # TODO: make this deterministic.
-  value = keys(terraform_data.service)
+  value = sort(keys(terraform_data.service))
 }
 
 output "service_profiles" {
