@@ -15,15 +15,15 @@
 
 ## 任务
 
-1. root 只定义 `aws.primary` 与 `aws.recovery` 两个 alias，不得依赖隐式 default provider；两者只能使用固定的
-   `test/test` LocalStack 凭证，并启用 credential/metadata/account 检查跳过项。
-2. 两个 provider 的 S3、STS endpoint 都必须来自 `var.localstack_endpoint`，S3 使用
-   path-style。
-3. child module 的 `required_providers` 声明
+背景：root 已提供 `aws.primary` 与 `aws.recovery` 两个 provider alias，均使用固定的
+`test/test` LocalStack 凭证，并已配置 S3、STS endpoint、path-style 以及 LocalStack
+兼容所需的检查跳过项。后续任务直接从 child module 和 provider 路由开始。
+
+1. child module 的 `required_providers` 声明
    `configuration_aliases = [aws.primary, aws.recovery]`。
-4. module 调用显式映射：`aws.primary = aws.primary`，`aws.recovery = aws.recovery`。
-5. 两个 alias 下分别读取 `aws_caller_identity` 并创建不同 bucket；bucket region 必须与 slot 一致。
-6. 输出 region/account/bucket 合同，使 grader 能识别 alias 是否被交换。
+2. module 调用显式映射：`aws.primary = aws.primary`，`aws.recovery = aws.recovery`。
+3. 两个 alias 下分别读取 `aws_caller_identity` 并创建不同 bucket；bucket region 必须与 slot 一致。
+4. 输出 region/account/bucket 合同，使 grader 能识别 alias 是否被交换。
 
 ## 验收命令
 
