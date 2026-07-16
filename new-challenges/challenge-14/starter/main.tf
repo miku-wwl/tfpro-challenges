@@ -1,9 +1,9 @@
 # This is the old baseline. Upgrade it to the release-v2 source and interface.
 module "release" {
-  source = "../fixtures/modules/release-v1"
+  source = "../fixtures/modules/release-v2"
 
-  name     = var.service_name
-  channels = sort(tolist(var.release_channels))
+  service_name     = var.service_name
+  release_channels = var.release_channels
 }
 
 resource "terraform_data" "contract" {

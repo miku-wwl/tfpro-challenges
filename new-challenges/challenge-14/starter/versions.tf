@@ -4,7 +4,7 @@ terraform {
   required_providers {
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.6.0" # TODO: v2 requires the 3.7 patch line.
+      version = "~> 3.7.0"
     }
   }
 }
