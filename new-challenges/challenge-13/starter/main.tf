@@ -34,8 +34,7 @@ resource "terraform_data" "service" {
     }
 
     postcondition {
-      # TODO: verify the normalized endpoint contract.
-      condition     = self.output.name == each.key
+      condition     = self.output.endpoint  == "${lower(each.key)}:${each.value.port}"
       error_message = "The generated endpoint is not normalized."
     }
   }
