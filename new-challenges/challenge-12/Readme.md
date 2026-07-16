@@ -16,6 +16,33 @@ consumer 再通过 `terraform_remote_state` 的 S3 backend 读取一个最小发
 6. provider 与 remote-state backend 仅使用 LocalStack `test/test`、loopback endpoint、path-style 与 skip flags。
 7. 输入重排不得改变地址；最终两个 root 均 clean plan，销毁顺序必须 consumer → producer。
 
+## 推荐执行顺序
+
+`producer` 与 `consumer` 是两个独立的 root module，应先处理 producer，再处理 consumer：
+
+1. 进入 `starter/producer`，完成 backend 初始化、state 迁移、plan 和 apply；
+2. 确认 producer 的 `release_contract` 已写入 S3 state；
+3. 进入 `starter/consumer`，通过 `terraform_remote_state` 读取 producer 的 contract，
+   然后执行 plan 和 apply；
+4. 销毁时使用相反顺序：先销毁 consumer，再销毁 producer。
+
+`release_contract` 的结构应类似：
+
+```hcl
+{
+  schema_version = 1
+  environment    = "prod"
+  bucket_name    = "tfpro-c12-producer"
+  object_keys = {
+    api = "services/api.json"
+  }
+}
+```
+
+其中 `object_keys` 只保存服务名到 S3 object key 的映射，不要复制整个 producer state。
+`services-no-enabled.csv` 用于验证 producer 的 `check`：当没有符合环境且 enabled 的服务时，
+配置应失败并显示对应的检查错误。
+
 ## 验收
 
 ```powershell
