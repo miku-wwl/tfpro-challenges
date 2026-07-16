@@ -42,8 +42,12 @@ resource "terraform_data" "service" {
 
 check "capacity_budget" {
   assert {
-    # TODO: aggregate typed capacity across all selected services.
-    condition     = length(local.services) > 0
+    condition     = (
+      sum([
+        for service in local.services : service.capacity
+      ]) <= var.policy.max_total_capacity
+    )
+
     error_message = "Selected services exceed max_total_capacity."
   }
 }
