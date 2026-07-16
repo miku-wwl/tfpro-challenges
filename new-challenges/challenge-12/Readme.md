@@ -8,40 +8,42 @@ consumer 再通过 `terraform_remote_state` 的 S3 backend 读取一个最小发
 
 ## Terraform 任务
 
-1. 两个 root 都声明 partial `backend "s3" {}`；backend bucket/key/endpoint 由 grader 在 `init` 时注入。
-2. producer 规范化 CSV，只选择目标环境且 enabled 的服务，并用 service name 作为稳定 `for_each` key。
-3. producer 创建一个 release bucket 和每服务一个对象，发布只含 schema、environment、bucket 与 object-key map 的 `release_contract`。
-4. consumer 通过 S3 `terraform_remote_state` 读取该 output，不复制 state JSON、不依赖 producer 资源地址。
-5. consumer 创建一个 receipt bucket 和稳定的 receipt 对象；precondition 必须固定 contract schema v1。
-6. provider 与 remote-state backend 仅使用 LocalStack `test/test`、loopback endpoint、path-style 与 skip flags。
-7. 输入重排不得改变地址；最终两个 root 均 clean plan，销毁顺序必须 consumer → producer。
+1. `producer` 与 `consumer` 是两个独立的 root module。先分别声明 partial
+   `backend "s3" {}`；backend bucket、key 和 endpoint 由 grader 在 `terraform init`
+   时注入。provider 与 remote-state backend 只能使用 LocalStack 的 `test/test`、
+   loopback endpoint、path-style 和 skip flags。
 
-## 推荐执行顺序
+2. 进入 `starter/producer`，规范化 CSV，只选择目标环境且 enabled 的服务，并使用
+   service name 作为稳定的 `for_each` key。producer 创建一个 release bucket 和每个
+   服务一个 S3 object；完成后执行 init、state migration、plan 和 apply。
 
-`producer` 与 `consumer` 是两个独立的 root module，应先处理 producer，再处理 consumer：
+3. producer 必须发布一个最小的 `release_contract` output，只包含 schema、environment、
+   bucket name 与 object-key map。确认该 output 已写入 S3 backend state 后，才能继续
+   consumer：
 
-1. 进入 `starter/producer`，完成 backend 初始化、state 迁移、plan 和 apply；
-2. 确认 producer 的 `release_contract` 已写入 S3 state；
-3. 进入 `starter/consumer`，通过 `terraform_remote_state` 读取 producer 的 contract，
-   然后执行 plan 和 apply；
-4. 销毁时使用相反顺序：先销毁 consumer，再销毁 producer。
+   ```hcl
+   {
+     schema_version = 1
+     environment    = "prod"
+     bucket_name    = "tfpro-c12-producer"
+     object_keys = {
+       api = "services/api.json"
+     }
+   }
+   ```
 
-`release_contract` 的结构应类似：
+4. 进入 `starter/consumer`，通过 S3 `terraform_remote_state` 读取 producer 的
+   `release_contract`。不得复制 state JSON，也不得依赖 producer 的资源地址。consumer
+   创建一个 receipt bucket 和稳定的 receipt objects，且 precondition 必须固定要求
+   `schema_version == 1`。
 
-```hcl
-{
-  schema_version = 1
-  environment    = "prod"
-  bucket_name    = "tfpro-c12-producer"
-  object_keys = {
-    api = "services/api.json"
-  }
-}
-```
+5. 分别对两个 root 执行 clean plan，并验证输入重排不会改变资源地址。完成后按相反顺序
+   销毁：先销毁 consumer，再销毁 producer。
+
+`services-no-enabled.csv` 用于验证 producer 的 `check`：当没有符合环境且 enabled 的
+服务时，配置应失败并显示对应的检查错误。
 
 其中 `object_keys` 只保存服务名到 S3 object key 的映射，不要复制整个 producer state。
-`services-no-enabled.csv` 用于验证 producer 的 `check`：当没有符合环境且 enabled 的服务时，
-配置应失败并显示对应的检查错误。
 
 ## 验收
 
