@@ -29,8 +29,7 @@ resource "terraform_data" "service" {
 
   lifecycle {
     precondition {
-      # TODO: also enforce the upper port bound, known owner, and allowed tier.
-      condition     = tonumber(each.value.port) > 0
+      condition     = tonumber(each.value.port) > 0 && tonumber(each.value.port) <= 65535 && contains(keys(local.owners), each.value.owner) && contains(var.policy.allowed_tiers, each.value.tier)
       error_message = "Each service row must satisfy the deployment contract."
     }
 
