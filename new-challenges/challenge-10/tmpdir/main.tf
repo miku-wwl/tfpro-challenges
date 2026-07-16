@@ -28,6 +28,21 @@ module "service" {
 }
 
 moved {
+  from = terraform_data.service[0]
+  to   = module.service["api"].terraform_data.service
+}
+
+moved {
+  from = terraform_data.service[1]
+  to   = module.service["web"].terraform_data.service
+}
+
+moved {
+  from = terraform_data.service[2]
+  to   = module.service["worker"].terraform_data.service
+}
+
+moved {
   from = module.service["api"].terraform_data.service
   to   = module.service["api"].terraform_data.this
 }

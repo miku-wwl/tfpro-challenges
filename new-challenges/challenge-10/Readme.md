@@ -23,6 +23,18 @@ child module，并把接口升级为 v2：以对象接收服务参数、支持 o
    `terraform_data.service[0..2]`。
 2. 把资源实现迁入 `modules/service`，root 以服务名 map 调用模块。
 
+   子模块内部的资源名称必须直接使用：
+
+   ```hcl
+   resource "terraform_data" "this" {
+     # 服务配置字段
+   }
+   ```
+
+   这里的 `this` 是资源标签，不是服务名称；它决定后续最终地址为
+   `module.service["name"].terraform_data.this`。请从一开始就使用该名称，
+   避免先创建 `terraform_data.service` 后再额外增加一次资源地址迁移。
+
 > [!NOTE]
 > 如果输入变量是 `list(object)`，不能直接用于 `for_each`，也不能直接使用
 > `toset(var.services)`，因为 Terraform 的 `for_each` 不接受对象集合。
@@ -66,7 +78,13 @@ child module，并把接口升级为 v2：以对象接收服务参数、支持 o
 4. 为每个旧地址写显式 moved block，目标为
    `module.service["name"].terraform_data.this`。
 5. 保持底层 `terraform_data.input` 完全一致，避免借“接口升级”偷偷修改实例。
-6. 保存第一次 plan，使用 `terraform show -json` 证明所有 resource action 都是 no-op。
+6. 学习保存和查看 Terraform Plan：
+   - 使用 `terraform plan -out=migration.tfplan` 将 plan 保存为二进制计划文件；
+   - 使用 `terraform show migration.tfplan` 以人类可读格式查看保存的计划；
+   - 使用 `terraform show -json migration.tfplan > migration.json` 将计划转换为 JSON，
+     便于脚本检查 resource actions；
+   - 保存的 plan 可以传给 `terraform apply migration.tfplan`，确保 apply 使用的正是
+     已审核过的计划。
 7. apply 后检查最终 state 地址，再确认第二次 plan 退出码为 0。
 
 `starter/` 是一个未完成的中间提交：资源虽然进入了 child module，但 root 仍以 `count`
