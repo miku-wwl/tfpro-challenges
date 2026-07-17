@@ -168,3 +168,11 @@ terraform destroy -auto-approve
   optional 属性自己的 default 会补齐。
 - LocalStack 不执行真实 user-data。这里只检查 plan、state 与 API metadata。
 - 结束前一定删除 `TF_VAR_compute`，否则它会影响后续练习。
+
+## Note（☆）：Task 4/5 中较少见的知识点
+
+- `TF_VAR_<name>` 可以从环境变量提供变量值；命令行 `-var` 的优先级高于它。
+- `optional(type, default)`：属性为 `null` 或省略时，使用 optional 的默认值；没有默认值的 optional 属性仍为 `null`。
+- 变量整体由 `-var` 覆盖时，不是只覆盖其中一个属性；整个 object 使用命令行传入的值。
+- `terraform plan -out=tfplan` 会保存计划，`terraform show tfplan` 用于查看保存的计划；只保存或查看不会 apply。
+- `user_data` 等敏感或可能泄露内容的值，不应作为 `for_each` key，也不应直接输出；需要时只输出 hash。
