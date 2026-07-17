@@ -115,6 +115,9 @@ terraform plan
 5. random result、原始 service token 和 token 的 SHA-256 摘要都只能放在 content
    中作为 value，不能用于 `for_each` key、resource name 或 S3 object key。
 
+> **Note（☆）**：这里的“摘要”英文是 `digest`，指 token 经过 SHA-256
+> 计算得到的固定长度、不可逆的 hash 指纹，不是文章的 `summary`。
+
 ```powershell
 terraform plan '-out=manifests.tfplan'
 terraform show manifests.tfplan
