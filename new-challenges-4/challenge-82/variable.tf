@@ -24,17 +24,28 @@ variable "block_devices" {
     condition     = alltrue([for k in keys(var.block_devices) : startswith(k, "/dev/")])
     error_message = "device key must start with `/dev/`"
   }
-  
+
   validation {
-    condition     = alltrue([for v in values(var.block_devices) : v.volume_size>0])
+    condition     = alltrue([for v in values(var.block_devices) : v.volume_size > 0])
     error_message = "volume size must more than 0"
   }
 
   validation {
-    condition     = alltrue([for v in values(var.block_devices) : v.volume_type=="gp3"])
+    condition     = alltrue([for v in values(var.block_devices) : v.volume_type == "gp3"])
     error_message = "volume type must be gp3"
   }
 
-  
-  
+  validation {
+    condition = alltrue([
+      for v in values(var.block_devices) : v.iops == null || v.iops >= 3000
+    ])
+    error_message = "if iops exists, it must be more than 3000"
+  }
+
+  validation {
+    condition = alltrue([
+      for v in values(var.block_devices) : v.throughput == null || v.throughput >= 125
+    ])
+    error_message = "if throughput exists, it must be more than 125"
+  }
 }
