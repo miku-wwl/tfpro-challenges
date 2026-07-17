@@ -5,6 +5,7 @@
 *.tfstate
 *.tfstate.*
 *.terraform.lock.hcl
+*.tfplan
 
 # Local AWS credentials
 **/.aws/credentials
