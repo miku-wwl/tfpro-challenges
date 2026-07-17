@@ -1,3 +1,0 @@
-rule_id,protocol,from_port,to_port,cidr,description,enabled
-same,tcp,443,443,10.10.0.0/16,first,true
-same,tcp,8443,8443,10.20.0.0/16,second,true

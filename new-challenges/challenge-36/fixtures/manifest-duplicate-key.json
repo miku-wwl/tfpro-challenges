@@ -1,4 +1,0 @@
-[
-  {"artifact_id":"one","source":"artifacts/api-config.json","object_key":"shared/object","content_type":"application/json","owner":"platform","enabled":true},
-  {"artifact_id":"two","source":"artifacts/release-notes.txt","object_key":"shared/object","content_type":"text/plain","owner":"release","enabled":true}
-]

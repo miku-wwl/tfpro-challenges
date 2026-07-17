@@ -1,4 +1,0 @@
-team,workload,policy
-security,detector,security-events
-platform,delivery,artifact-publisher
-payments,ledger,readonly-audit

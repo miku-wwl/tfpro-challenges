@@ -1,4 +1,0 @@
-[
-  {"artifact_id":"api-config","source":"artifacts/api-config.json","object_key":"a/config.json","content_type":"application/json","owner":"platform","enabled":true},
-  {"artifact_id":"api-config","source":"artifacts/release-notes.txt","object_key":"b/notes.txt","content_type":"text/plain","owner":"release","enabled":true}
-]

@@ -1,2 +1,0 @@
-rule_id,protocol,from_port,to_port,cidr,description,enabled
-,tcp,443,443,10.10.0.0/16,missing id,true

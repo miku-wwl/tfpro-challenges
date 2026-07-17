@@ -1,6 +1,0 @@
-name,owner,environment,locations,port,enabled
-legacy,platform,prod,primary,8081,false
-metrics,observability,prod,dr,9090,true
-admin,platform,dev,primary,8080,true
-worker,data,prod,primary,9000,true
-api,platform,prod,primary|dr,8443,true

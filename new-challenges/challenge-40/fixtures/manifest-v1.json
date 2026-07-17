@@ -1,9 +1,0 @@
-{
-  "schema_version": "release-manifest/v1",
-  "contract_version": 1,
-  "release_version": "2026.07.1",
-  "artifacts": [
-    { "name": "api", "key": "releases/api/current.txt", "source": "payloads/api-v1.txt", "sha256": "5b75c35286490e1c356eb9e6c2a49225231db2b169acb8bea07811b077b3a411" },
-    { "name": "worker", "key": "releases/worker/current.txt", "source": "payloads/worker-v1.txt", "sha256": "155b7720a871a06a743222357f45a570ff91758d6307e2837d08390cf4b3e8d9" }
-  ]
-}

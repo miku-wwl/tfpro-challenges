@@ -1,4 +1,0 @@
-rule_id,environment,security_group,subnet_key,protocol,from_port,to_port,description,owner,enabled
-duplicate-rule,prod,web,public-a,tcp,443,443,First definition,edge,true
-duplicate-rule,prod,web,public-a,tcp,8443,8443,Conflicting definition,edge,true
-

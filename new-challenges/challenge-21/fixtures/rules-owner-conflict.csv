@@ -1,4 +1,0 @@
-rule_id,environment,security_group,subnet_key,protocol,from_port,to_port,description,owner,enabled
-web-edge,prod,web,public-a,tcp,443,443,Edge-owned rule,edge,true
-web-platform,prod,web,private-a,tcp,8443,8443,Conflicting platform owner,platform,true
-

@@ -1,2 +1,0 @@
-name,environment,location,instance_type,owner,enabled
-api,prod,primary,t3.micro,platform,yes

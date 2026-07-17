@@ -1,3 +1,0 @@
-key,description,protocol,from_port,to_port,cidr
-admin,Administrative SSH,tcp,22,22,10.52.0.0/24
-admin,Duplicate admin,tcp,2222,2222,10.52.1.0/24

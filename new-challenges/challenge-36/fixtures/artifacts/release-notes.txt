@@ -1,2 +1,0 @@
-release 2026.07
-stable artifact manifest

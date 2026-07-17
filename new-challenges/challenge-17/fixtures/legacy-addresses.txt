@@ -1,5 +1,0 @@
-aws_s3_bucket.primary_logs -> module.platform.module.primary.aws_s3_bucket.logs
-aws_sns_topic.primary_events -> module.platform.module.primary.aws_sns_topic.events
-aws_s3_bucket.dr_logs -> module.platform.module.dr.aws_s3_bucket.logs
-aws_sns_topic.dr_events -> module.platform.module.dr.aws_sns_topic.events
-

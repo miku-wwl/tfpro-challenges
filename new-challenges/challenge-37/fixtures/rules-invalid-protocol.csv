@@ -1,2 +1,0 @@
-rule_id,protocol,from_port,to_port,cidr,description,enabled
-web,sctp,443,443,10.10.0.0/16,bad protocol,true

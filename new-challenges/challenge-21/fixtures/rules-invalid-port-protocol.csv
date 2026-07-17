@@ -1,4 +1,0 @@
-rule_id,environment,security_group,subnet_key,protocol,from_port,to_port,description,owner,enabled
-bad-protocol,prod,web,public-a,gre,0,0,Unsupported protocol,edge,true
-bad-port,prod,api,private-a,tcp,70000,69999,Invalid and reversed ports,platform,true
-

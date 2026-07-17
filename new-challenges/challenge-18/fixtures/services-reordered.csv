@@ -1,7 +1,0 @@
-service,owner,environment,port,enabled,location,tier
-legacy,platform,prod,80,false,primary,legacy
-metrics,observability,prod,9090,true,both,standard
-admin,platform,dev,443,true,primary,critical
-worker,data,prod,8443,true,dr,standard
-api,platform,prod,443,true,primary,critical
-

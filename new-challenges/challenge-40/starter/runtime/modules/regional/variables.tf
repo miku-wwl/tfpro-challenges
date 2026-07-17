@@ -1,9 +1,0 @@
-variable "run_id" { type = string }
-variable "role" { type = string }
-variable "region" { type = string }
-variable "ami_id" { type = string }
-variable "vpc_id" { type = string }
-variable "subnet_id" { type = string }
-variable "instance_profile" { type = string }
-variable "fleets" { type = map(any) }
-variable "release_contract" { type = any }

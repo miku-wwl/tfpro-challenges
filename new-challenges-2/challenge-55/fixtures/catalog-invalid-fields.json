@@ -1,6 +1,0 @@
-{
-  "schema_version": 1,
-  "release_version": "latest",
-  "services": [{ "name": "API!", "instance_type": "m9.mega" }],
-  "nodes": [{ "node_id": "bad node", "service": "API!" }]
-}

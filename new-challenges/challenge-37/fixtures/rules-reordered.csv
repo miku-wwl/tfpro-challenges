@@ -1,5 +1,0 @@
-rule_id,protocol,from_port,to_port,cidr,description,enabled
-disabled-http,tcp,80,80,10.30.0.0/24,disabled sample,false
-dns-udp,udp,53,53,10.10.0.0/16,service DNS,true
-web-tls,tcp,443,443,10.10.0.0/16,application TLS,true
-admin-ssh,tcp,22,22,10.20.0.0/24,administration,true

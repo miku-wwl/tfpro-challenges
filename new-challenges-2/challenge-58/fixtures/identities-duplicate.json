@@ -1,7 +1,0 @@
-{
-  "schema_version": 1,
-  "identities": [
-    { "name": "API", "owner": "platform", "actions": ["s3:GetObject"] },
-    { "name": "api", "owner": "delivery", "actions": ["s3:GetObject"] }
-  ]
-}

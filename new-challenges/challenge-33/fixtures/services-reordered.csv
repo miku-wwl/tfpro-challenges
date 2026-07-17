@@ -1,4 +1,0 @@
-service,owner,enabled
-legacy,platform,false
-worker,data,true
-api,platform,true

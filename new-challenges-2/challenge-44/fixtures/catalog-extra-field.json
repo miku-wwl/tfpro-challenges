@@ -1,1 +1,0 @@
-{"schema_version":2,"bundles":[{"name":"api","owner":"platform","artifact":{"key":"releases/api.txt","payload":"api-release-v2","sha256":"b774e8ffbaf16f21738175c2047d50ebc274b0c49d31ce60086632baebde4581"},"identity":{"actions":["s3:GetObject"]},"deprecated":true}]}

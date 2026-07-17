@@ -1,7 +1,0 @@
-{
-  "contract_version": 2,
-  "workload": {
-    "name": "api",
-    "instance_type": "t3.micro"
-  }
-}

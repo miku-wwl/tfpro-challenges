@@ -1,9 +1,0 @@
-{
-  "contract_version": 1,
-  "generation": 0,
-  "artifact": {
-    "key": "../unsafe",
-    "content": "tfpro-release-v7",
-    "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  }
-}

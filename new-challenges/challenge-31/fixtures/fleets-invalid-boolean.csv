@@ -1,3 +1,0 @@
-fleet_id,environment,subnet_key,instance_type,enabled,owner
-api,prod,public-a,t3.micro,yes,edge
-

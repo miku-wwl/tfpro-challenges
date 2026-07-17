@@ -1,6 +1,0 @@
-name,environment,location,instance_type,owner,enabled
-retired,prod,dr,t3.micro,legacy,false
-worker,prod,primary,t3.small,data,true
-batch,dev,dr,t3.micro,data,true
-api,prod,dr,t3.micro,platform,true
-api,prod,primary,t3.micro,platform,true

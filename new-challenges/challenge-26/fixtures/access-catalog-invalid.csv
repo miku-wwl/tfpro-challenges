@@ -1,6 +1,0 @@
-team,workload,policy
-platform,delivery,artifact-publisher
-platform,delivery,unknown-policy
-payments,ledger,missing-policy
-security,detector,empty-policy
-operations,publisher,wildcard-policy

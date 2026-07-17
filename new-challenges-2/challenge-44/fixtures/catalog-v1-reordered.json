@@ -1,1 +1,0 @@
-{"bundles":[{"actions":["s3:GetObject"],"payload":"worker-release-v1","object_key":"releases/worker.txt","owner":"operations","name":"worker"},{"payload":"api-release-v1","name":"api","actions":["s3:GetObject"],"owner":"platform","object_key":"releases/api.txt"}],"schema_version":1}

@@ -1,3 +1,0 @@
-name,owner,environment,locations,port,enabled
-api,platform,prod,primary,8443,true
-api,platform,prod,primary,9443,true

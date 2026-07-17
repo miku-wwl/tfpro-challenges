@@ -1,3 +1,0 @@
-name,owner,environment,port,enabled,location
-api,platform,prod,8443,true,primary
-worker,data,prod,9000,true,moon

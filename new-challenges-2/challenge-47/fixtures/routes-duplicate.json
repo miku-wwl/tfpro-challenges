@@ -1,7 +1,0 @@
-{
-  "schema_version": 1,
-  "routes": [
-    { "name": "primary", "owner": "platform" },
-    { "name": "primary", "owner": "security" }
-  ]
-}

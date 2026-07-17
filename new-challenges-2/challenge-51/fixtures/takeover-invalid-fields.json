@@ -1,7 +1,0 @@
-{
-  "contract_version": 1,
-  "workload": {
-    "name": "API!",
-    "instance_type": "m9.mega"
-  }
-}

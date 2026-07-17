@@ -1,9 +1,0 @@
-{
-  "contract_version": 2,
-  "workload": "audit",
-  "bucket_suffix": "evidence",
-  "secret": "vault-token-2026-rotate",
-  "statements": [
-    { "key": "list", "scope": "bucket", "actions": ["s3:ListBucket"] }
-  ]
-}

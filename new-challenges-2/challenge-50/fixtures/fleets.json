@@ -1,1 +1,0 @@
-{"schema_version":1,"fleets":[{"name":"api","location":"primary","instance_type":"t3.micro","capacity":1},{"name":"worker","location":"dr","instance_type":"t3.micro","capacity":1}]}

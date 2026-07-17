@@ -1,5 +1,0 @@
-fleet_id,environment,subnet_candidates,instance_type,enabled,owner,placement_epoch
-api,prod,public-a|private-a,t3.micro,true,edge,2
-worker,prod,private-a|public-a,t3.small,true,platform,1
-preview,dev,public-a|private-a,t3.micro,true,developer-experience,1
-retired,prod,private-a|public-a,t3.micro,false,platform,1

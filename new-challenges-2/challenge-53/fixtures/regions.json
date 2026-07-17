@@ -1,7 +1,0 @@
-{
-  "contract_version": 1,
-  "regions": [
-    { "key": "primary", "region": "us-east-1", "instance_type": "t3.micro", "ami_pattern": "al2023-ami-*" },
-    { "key": "dr", "region": "us-west-2", "instance_type": "t3.small", "ami_pattern": "al2023-ami-*" }
-  ]
-}

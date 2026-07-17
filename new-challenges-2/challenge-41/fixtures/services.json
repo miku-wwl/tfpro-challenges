@@ -1,1 +1,0 @@
-{"schema_version":1,"services":[{"name":"api","owner":"platform","enabled":true},{"name":"worker","owner":"operations","enabled":true},{"name":"retired","owner":"archive","enabled":false}]}

@@ -1,6 +1,0 @@
-fleet_id,environment,subnet_key,instance_type,enabled,owner
-retired,prod,private-a,t3.micro,false,platform
-preview,dev,public-a,t3.micro,true,developer-experience
-worker,prod,private-a,t3.small,true,platform
-api,prod,public-a,t3.micro,true,edge
-

@@ -1,6 +1,0 @@
-[
-  { "name": "api", "owner": "platform", "tier": "critical", "enabled": true },
-  { "name": "worker", "owner": "data", "tier": "standard", "enabled": true },
-  { "name": "legacy", "owner": "platform", "tier": "standard", "enabled": false }
-]
-
