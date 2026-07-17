@@ -58,5 +58,21 @@ output "starter_bucket" {
   value = aws_s3_bucket.inventory.id
 }
 
-# Tasks 2-5 add random shards, reproduce two invalid for_each expressions,
-# and publish manifests under stable public service keys.
+resource "random_integer" "shard" {
+  for_each = var.service_names
+  min      = 100
+  max      = 999
+  keepers = {
+    name = each.key
+  }
+}
+
+resource "aws_s3_object" "invalid_random_key" {
+  for_each = toset([
+    for name in var.service_names : random_integer.shard[name].result
+  ])
+
+  bucket = aws_s3_bucket.inventory.id
+  key    = each.key
+
+}
