@@ -65,16 +65,18 @@ resource "aws_launch_template" "release" {
   instance_type          = "t3.micro"
   update_default_version = true
 
-  block_device_mappings {
-    device_name = "/dev/sda1"
-
-    ebs {
-      delete_on_termination = "true"
-      encrypted             = "true"
-      iops                  = 3000
-      throughput            = 125
-      volume_size           = 8
-      volume_type           = "gp3"
+  dynamic "block_device_mappings" {
+    for_each = local.block_devices
+    content {
+      device_name = block_device_mappings.key
+      ebs {
+        delete_on_termination = block_device_mappings.value.ebs.delete_on_termination
+        encrypted             = block_device_mappings.value.ebs.encrypted
+        iops                  = block_device_mappings.value.ebs.iops
+        throughput            = block_device_mappings.value.ebs.throughput
+        volume_size           = block_device_mappings.value.ebs.volume_size
+        volume_type           = block_device_mappings.value.ebs.volume_type
+      }
     }
   }
 

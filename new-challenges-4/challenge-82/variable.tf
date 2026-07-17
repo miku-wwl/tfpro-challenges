@@ -18,6 +18,15 @@ variable "block_devices" {
       iops                  = 3000
       throughput            = 125
     }
+
+    "/dev/sdf" : {
+      volume_type           = "gp3"
+      volume_size           = 20
+      encrypted             = true
+      delete_on_termination = true
+      iops                  = 3000
+      throughput            = 125
+    }
   }
 
   validation {
