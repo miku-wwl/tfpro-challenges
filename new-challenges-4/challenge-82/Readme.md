@@ -96,6 +96,20 @@ terraform plan '-var=block_devices={\"/dev/sda1\"={volume_type=\"gp3\",volume_si
 plan 必须被 variable validation 挡住，不能调用 CreateLaunchTemplateVersion。失败后继续
 使用默认值。
 
+> **Note（☆）**：`keys(var.block_devices)` 获取所有 map key；`for` 逐个检查，
+> `alltrue()` 要求所有 key 都以 `/dev/` 开头。
+>
+> ```hcl
+> validation {
+>   condition = alltrue([
+>     for device_name in keys(var.block_devices) :
+>     startswith(device_name, "/dev/")
+>   ])
+>
+>   error_message = "每个 block device 的 key 必须以 /dev/ 开头。"
+> }
+> ```
+
 ## Task 3：规范化 Optional 与 Provider Schema
 
 添加 `local.block_devices`，逐项生成 provider 所需的结构。注意 AWS provider `5.80.0`
