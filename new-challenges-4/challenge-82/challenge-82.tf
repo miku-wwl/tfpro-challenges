@@ -42,6 +42,23 @@ data "aws_ami" "selected" {
   }
 }
 
+locals {
+  block_devices = {
+    for device_name, device in var.block_devices : device_name => {
+      device_name = device_name
+
+      ebs = {
+        delete_on_termination = tostring(device.delete_on_termination)
+        encrypted             = tostring(device.encrypted)
+        iops                  = device.iops
+        throughput            = device.throughput
+        volume_size           = device.volume_size
+        volume_type           = device.volume_type
+      }
+    }
+  }
+}
+
 resource "aws_launch_template" "release" {
   name                   = "tfpro-c82-release"
   image_id               = data.aws_ami.selected.id
@@ -74,6 +91,10 @@ output "starter_launch_template" {
     default_version = aws_launch_template.release.default_version
     latest_version  = aws_launch_template.release.latest_version
   }
+}
+
+output "normalized_block_devices" {
+  value = local.block_devices
 }
 
 # Tasks 2-5 replace the literal block above with a validated catalog and a
