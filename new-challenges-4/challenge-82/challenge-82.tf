@@ -7,7 +7,6 @@ terraform {
     }
   }
 }
-
 provider "aws" {
   region                      = "us-east-1"
   access_key                  = "test"
@@ -86,18 +85,16 @@ resource "aws_launch_template" "release" {
   }
 }
 
-output "starter_launch_template" {
+output "launch_template_contract" {
   value = {
     id              = aws_launch_template.release.id
     name            = aws_launch_template.release.name
+    image_id        = data.aws_ami.selected.id
     default_version = aws_launch_template.release.default_version
     latest_version  = aws_launch_template.release.latest_version
+    block_devices = [
+      for device_name in sort(keys(local.block_devices)) :
+      local.block_devices[device_name]
+    ]
   }
 }
-
-output "normalized_block_devices" {
-  value = local.block_devices
-}
-
-# Tasks 2-5 replace the literal block above with a validated catalog and a
-# dynamic block_device_mappings block, then add a second volume.
