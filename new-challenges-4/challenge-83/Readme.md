@@ -107,10 +107,13 @@ terraform plan
 添加正确的 `aws_s3_object.manifest`：
 
 1. `for_each` 从 `service_names` 构造 `service => service` 的 map；
-2. key 为 `manifests/<service>.json`；
-3. content 使用 `jsonencode`，包含 service、对应 random result，以及对应 token 的
-   `sha256`；
-4. random result 与 token/hash 都只能放在 value 中，不能参与 resource address。
+2. 使用 Task 1 创建的 bucket：`bucket = aws_s3_bucket.inventory.id`；
+3. S3 object 的 `key` 使用 `"manifests/${each.key}.json"`，不要使用 random result、
+   原始 token 或 token hash；
+4. `content` 使用 `jsonencode`，包含当前 service、对应的 random result，以及对应
+   token 的 SHA-256 摘要；
+5. random result、原始 service token 和 token 的 SHA-256 摘要都只能放在 content
+   中作为 value，不能用于 `for_each` key、resource name 或 S3 object key。
 
 ```powershell
 terraform plan '-out=manifests.tfplan'
