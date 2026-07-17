@@ -90,7 +90,7 @@ terraform plan '-var=network_matrix={bad={cidrs=[\"10.0.0.0/24\"],ports=[0],prot
    `web|10.20.0.0/24|443|tcp`；
 4. 把 rows 转成 `local.ingress_by_key` map。
 
-添加临时输出 `compiled_ingress`，然后检查：
+使用 `terraform console` 直接检查 locals，不需要添加临时 output：
 
 ```powershell
 terraform console
@@ -99,9 +99,29 @@ terraform console
 ```hcl
 length(local.ingress_by_key)
 sort(keys(local.ingress_by_key))
+local.ingress_by_key
 ```
 
-预期长度为 `5`。退出 console 后运行 `terraform plan`，仍应为 `No changes`。
+预期长度为 `5`，并能看到 5 个 canonical rows。退出 console 后运行
+`terraform plan`，预期为 `No changes`。
+
+> **Note（☆）— `setproduct`**：生成多个集合的所有组合。本题中
+> `setproduct(policy.cidrs, policy.ports)` 返回 `[CIDR, port]` 对；例如 2 个
+> CIDR × 2 个 port 会得到 4 组，使用 `pair[0]` 取 CIDR、`pair[1]` 取 port。
+>
+> 可复用模板：
+>
+> ```hcl
+> flatten([
+>   for name, item in var.items : [
+>     for pair in setproduct(item.set_a, item.set_b) : {
+>       name = name
+>       a    = pair[0]
+>       b    = pair[1]
+>     }
+>   ]
+> ])
+> ```
 
 ## Task 4：用一个 Resource Block 创建五条规则
 

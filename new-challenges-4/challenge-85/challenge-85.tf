@@ -68,6 +68,25 @@ variable "network_matrix" {
   }
 }
 
+locals {
+  ingress_rows = flatten([
+    for policy_name, policy in var.network_matrix : [
+      for pair in setproduct(policy.cidrs, policy.ports) : {
+        key         = "${policy_name}|${pair[0]}|${pair[1]}|${policy.protocol}"
+        policy      = policy_name
+        cidr        = pair[0]
+        port        = pair[1]
+        protocol    = policy.protocol
+        description = policy.description
+      }
+    ]
+  ])
+
+  ingress_by_key = {
+    for row in local.ingress_rows : row.key => row
+  }
+}
+
 data "aws_subnet" "selected" {
   filter {
     name   = "availability-zone"
