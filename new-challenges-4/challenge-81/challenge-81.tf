@@ -40,6 +40,26 @@ variable "compute_spec" {
   }
 }
 
+data "aws_ami" "selected" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = [var.compute_spec.ami_name_pattern]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [var.compute_spec.architecture]
+  }
+
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+
+}
+
 data "aws_caller_identity" "current" {}
 
 output "starter_identity" {
@@ -50,4 +70,58 @@ output "starter_identity" {
   }
 }
 
-# Tasks 2-5 add the AMI query, subnet query, EC2 instance, and final contract.
+# output "selected_ami" {
+#   value = {
+#     id           = data.aws_ami.selected.id
+#     name         = data.aws_ami.selected.name
+#     architecture = data.aws_ami.selected.architecture
+#   }
+# }
+
+data "aws_subnet" "selected" {
+  filter {
+    name   = "availability_zone"
+    values = [var.compute_spec.availability_zone]
+  }
+
+  filter {
+    name   = "default_for_az"
+    values = ["true"]
+  }
+}
+
+# output "selected_subnet" {
+#   value = {
+#     id                = data.aws_subnet.selected.id
+#     vpc_id            = data.aws_subnet.selected.vpc_id
+#     cidr_block        = data.aws_subnet.selected.cidr_block
+#     availability_zone = data.aws_subnet.selected.availability_zone
+#   }
+# }
+
+resource "aws_instance" "exercise" {
+  ami           = data.aws_ami.selected.id
+  subnet_id     = data.aws_subnet.selected.id
+  instance_type = var.compute_spec.instance_type
+  tags = {
+    Name      = "tfpro-c81-query-contract"
+    Challenge = "81"
+  }
+}
+
+output "compute_contract" {
+  value = {
+    instance_id   = aws_instance.exercise.id
+    instance_type = aws_instance.exercise.instance_type
+
+    ami_id   = data.aws_ami.selected.id
+    ami_name = data.aws_ami.selected.name
+
+    subnet_id = aws_instance.exercise.subnet_id
+    vpc_id            = data.aws_subnet.selected.vpc_id
+    cidr_block        = data.aws_subnet.selected.cidr_block
+    availability_zone = data.aws_subnet.selected.availability_zone
+
+    account_id = data.aws_caller_identity.current.account_id
+  }
+}
