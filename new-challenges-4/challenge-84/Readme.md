@@ -68,14 +68,21 @@ terraform plan '-var=compute={name=\"bad_name\",instance_type=\"m5.large\",avail
 
 预期失败于 variable validation，并且不会调用 EC2 API修改实例。
 
-## Task 3：输出 Raw 与 Effective Contract
+## Task 3：计算 Effective Compute 并输出 Contract
 
-添加 `local.effective_compute` 与 `output "compute_contract"`，至少展示：
+这一步分为两层，不要把 `local` 和 `output` 当成同一个东西：
 
-- effective name、instance type、availability zone 与合并后的 tags；
-- `user_data_is_null = var.compute.user_data == null`；
-- instance ID、AMI ID、Subnet ID；
-- 可选：仅输出 user-data 的 hash，不输出明文。
+1. 添加 `local.effective_compute`，只负责整理最终生效的配置：
+   - name、instance type、availability zone；
+   - 合并后的 tags；
+   - `user_data_is_null = var.compute.user_data == null`。
+2. 添加 `output "compute_contract"`，引用上述 local，并补充资源运行信息：
+   - instance ID；
+   - AMI ID；
+   - Subnet ID；
+
+原始输入仍通过 `var.compute` 查看；`local.effective_compute` 是中间计算结果，
+`compute_contract` 才是对外展示的最终合同。
 
 ```powershell
 terraform apply -auto-approve
@@ -84,6 +91,9 @@ terraform plan
 ```
 
 默认路径下 `user_data_is_null` 应为 `true`，plan 应为 `No changes`。
+
+> **Note（☆）**：本题不实现可选的 `user-data hash` 输出。
+> `compute_contract` 不输出 user-data 明文，也不输出其 hash。
 
 ## Task 4：让 `TF_VAR_compute` 覆盖 Variable Default
 

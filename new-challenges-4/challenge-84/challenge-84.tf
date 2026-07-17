@@ -36,6 +36,21 @@ variable "compute" {
   default = {
     name = "tfpro-c84-default"
   }
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9-]+$", var.compute.name)) && length(var.compute.name) >= 3 && length(var.compute.name) <= 40
+    error_message = "name can only contain characters, numbers and -, the range of the length is between 3 and 40"
+  }
+
+  validation {
+    condition     = var.compute.instance_type == "t3.micro" || var.compute.instance_type == "t3.small"
+    error_message = "instance_type can only be t3.micro or t3.small"
+  }
+
+  validation {
+    condition     = startswith(var.compute.availability_zone, "us-east-1")
+    error_message = "availability zone must starts with `us-east-1`"
+  }
 }
 
 data "aws_ami" "selected" {
@@ -93,5 +108,31 @@ output "starter_instance" {
   }
 }
 
-# Tasks 2-5 add validation and a normalized contract, then exercise default,
-# TF_VAR_compute, and -var precedence without committing any tfvars files.
+locals {
+  effective_compute = {
+    name              = var.compute.name
+    instance_type     = var.compute.instance_type
+    availability_zone = var.compute.availability_zone
+    tags = merge({
+      Name      = var.compute.name
+      Challenge = "84"
+      },
+      var.compute.tags,
+    )
+    user_data_is_null = var.compute.user_data == null
+  }
+}
+
+output "compute_contract" {
+  value = {
+    name              = local.effective_compute.name
+    instance_type     = local.effective_compute.instance_type
+    availability_zone = local.effective_compute.availability_zone
+    tags              = local.effective_compute.tags
+    user_data_is_null = local.effective_compute.user_data_is_null
+
+    instance_id = aws_instance.exercise.id
+    ami_id      = aws_instance.exercise.ami
+    subnet_id   = aws_instance.exercise.subnet_id
+  }
+}
