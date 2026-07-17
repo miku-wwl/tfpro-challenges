@@ -50,6 +50,22 @@ variable "network_matrix" {
       description = "restricted administration"
     }
   }
+
+  validation {
+    condition = length(var.network_matrix) > 0 && alltrue([
+      for policy in values(var.network_matrix) : length(policy.cidrs) > 0 &&
+      length(policy.ports) > 0 &&
+      alltrue([
+        for port in policy.ports : port >= 1 && port <= 65535
+      ]) &&
+      alltrue([
+        for cidr in policy.cidrs : can(cidrnetmask(cidr))
+      ]) &&
+      (policy.protocol == "tcp" || policy.protocol == "udp")
+    ])
+
+    error_message = "network_matrix must be non-empty; each policy needs CIDRs and ports, ports must be 1-65535, CIDRs must be valid, and protocol must be tcp or udp."
+  }
 }
 
 data "aws_subnet" "selected" {
