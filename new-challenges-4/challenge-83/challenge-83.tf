@@ -58,3 +58,40 @@ output "starter_bucket" {
   value = aws_s3_bucket.inventory.id
 }
 
+resource "random_integer" "shard" {
+  for_each = var.service_names
+
+  min = 100
+  max = 999
+
+  keepers = {
+    name = each.key
+  }
+}
+
+resource "aws_s3_object" "manifest" {
+  for_each = { for service in var.service_names : service => service }
+
+  key    = "manifests/${each.key}.json"
+  bucket = aws_s3_bucket.inventory.id
+
+  content = jsonencode({
+    service              = each.key
+    random               = random_integer.shard[each.key].result
+    sha256_service_token = sha256(var.service_tokens[each.key])
+  })
+
+}
+
+
+output "manifest_keys" {
+  value = sort([
+    for service in var.service_names : "manifests/${service}.json"
+  ])
+}
+
+output "shard_contract" {
+  value = {
+    for service in var.service_names : service => random_integer.shard[service].result
+  }
+}
