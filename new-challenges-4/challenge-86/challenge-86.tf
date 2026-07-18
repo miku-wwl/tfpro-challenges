@@ -47,6 +47,6 @@ output "audit_contract" {
   description = "Keep this object shape stable while bucket becomes string or null."
   value = {
     enabled = var.enable_audit
-    bucket  = aws_s3_bucket.audit[0].id
+    bucket  = one(aws_s3_bucket.audit[*].id)
   }
 }
