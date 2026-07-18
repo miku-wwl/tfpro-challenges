@@ -127,12 +127,25 @@ resource "aws_vpc_security_group_ingress_rule" "matrix" {
   description       = each.value.description
 }
 
-output "starter_security_group" {
+
+# ## Task 6：发布规则合同、API 验收与清理
+
+# 将输出整理为 `ingress_contract`：包含 Security Group/VPC ID，以及按 stable key 排序的
+# 规则对象列表。
+
+output "ingress_contract" {
   value = {
-    id     = aws_security_group.application.id
-    vpc_id = aws_security_group.application.vpc_id
+    security_group_id = aws_security_group.application.id
+    vpc_id            = aws_security_group.application.vpc_id
+    rules = [
+      for ingress in sort(keys(local.ingress_by_key)) : {
+        key         = local.ingress_by_key[ingress].key
+        policy      = local.ingress_by_key[ingress].policy
+        cidr        = local.ingress_by_key[ingress].cidr
+        port        = local.ingress_by_key[ingress].port
+        protocol    = local.ingress_by_key[ingress].protocol
+        description = local.ingress_by_key[ingress].description
+      }
+    ]
   }
 }
-
-# Tasks 2-5 validate and flatten network_matrix, build stable rule keys, and
-# create aws_vpc_security_group_ingress_rule instances.

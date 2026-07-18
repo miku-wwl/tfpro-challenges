@@ -174,6 +174,7 @@ terraform output ingress_contract
 
 $sgId = (terraform output -json ingress_contract | ConvertFrom-Json).security_group_id
 aws --endpoint-url=http://localhost:4566 ec2 describe-security-group-rules `
+  --region us-east-1 `
   --filters Name=group-id,Values=$sgId `
   --query 'SecurityGroupRules[?IsEgress==`false`].{Id:SecurityGroupRuleId,Cidr:CidrIpv4,From:FromPort,To:ToPort,Protocol:IpProtocol,Description:Description}'
 
