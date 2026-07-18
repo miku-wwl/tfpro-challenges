@@ -39,14 +39,14 @@ variable "network_matrix" {
 
   default = {
     web = {
-      cidrs       = ["10.20.0.0/24", "10.30.0.0/24"]
-      ports       = [80, 443]
+      cidrs       = ["10.30.0.0/24", "10.20.0.0/24"]
+      ports       = [443, 80]
       description = "application traffic"
     }
 
     admin = {
       cidrs       = ["203.0.113.10/32"]
-      ports       = [22]
+      ports       = [22, 3389]
       description = "restricted administration"
     }
   }
