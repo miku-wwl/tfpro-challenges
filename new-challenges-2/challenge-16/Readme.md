@@ -1,169 +1,260 @@
-# Challenge 16：修复 Provider 工作流并发布可复现计划
+# Challenge 16：双 Provider 发布接管与可复现执行（Hard）
 
 ## 场景
 
-你的团队接手了一份可以连接 LocalStack 的 Terraform 配置。当前配置仍使用旧的 AWS
-Provider 约束，并把测试凭据直接写在 Provider block 中。团队的新基线要求升级 Provider、
-收紧 Terraform CLI 版本范围、改用环境变量认证，并通过一份经过审阅的 saved plan 创建资源。
+两个由旧脚本创建的 S3 bucket 即将交由 Terraform 接管。一次仓促重构把 Provider、版本约束、
+输入契约、资源地址、发布对象和输出同时弄坏了。你需要只修改一个 Terraform 文件，并使用
+Terraform CLI 完成诊断、Provider 升级、现有资源导入、saved-plan 审阅、apply 和最终收敛。
 
-本题按照 Terraform Authoring and Operations Professional 的实验题风格设计：你需要修改
-Starter、选择正确的 CLI 参数，并让最终配置、lockfile、state 与实际资源同时满足验收条件。
-README 不提供逐条解法命令。
+本题不是命令跟做题。README 只规定业务目标、限制和可验证结果；不会给出逐步解法。
 
-## 覆盖的考试目标
+> 建议限时：50–70 分钟。目标难度：Terraform Professional 90–95 分实验题。
 
-- **1a**：使用 `terraform init` 及其选项初始化配置
-- **1b**：使用 `terraform plan` 及其选项生成执行计划
-- **1c**：使用 `terraform apply` 及其选项应用配置
-- **3a**：使用版本约束管理 Terraform binary 与 Provider
-- **3c**：在自动化场景中使用非交互 Terraform workflow
-- **5a**：理解 Provider plugin、配置要求与 lockfile 的职责边界
-- **5b**：配置 Provider source、alias、version constraint 与升级
-- **5c**：管理 Provider 认证
-- **5d**：排查 Provider 初始化与配置错误
+## Starter 结构
+
+压缩包内永久源文件必须始终只有：
+
+```text
+Readme.md
+challenge-16.tf
+```
+
+允许 Terraform 在运行时生成 `.terraform/`、`.terraform.lock.hcl`、state 和 plan 文件。
+不得新增 module、第二个 `.tf`、`.tfvars`、grader、Shell、PowerShell 或答案文件。
 
 ## 环境准备
 
-确保 LocalStack 已启动。PowerShell 示例：
+LocalStack 地址：`http://localhost:4566`
+
+设置测试凭据：
 
 ```powershell
-Set-Location .\challenge-16
 $env:AWS_ACCESS_KEY_ID = "test"
 $env:AWS_SECRET_ACCESS_KEY = "test"
 $env:AWS_DEFAULT_REGION = "us-east-1"
-Invoke-RestMethod http://localhost:4566/_localstack/health
 ```
 
-正式考试使用预配置的 Linux 环境，因此完成本题后，建议再在 WSL 或 Linux shell 中独立做一遍。
+```bash
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=us-east-1
+```
 
-## Starter 状态
+在一个干净的 LocalStack 环境中创建两个**已存在但尚未进入 Terraform state** 的 bucket：
 
-目录初始只有：
+```text
+aws --endpoint-url=http://localhost:4566 s3api create-bucket --bucket tfpro-c16-dev-artifacts
+aws --endpoint-url=http://localhost:4566 s3api create-bucket --bucket tfpro-c16-prod-artifacts
+```
 
-- `Readme.md`
-- `challenge-16.tf`
-
-Starter 具有以下特征：
-
-- Terraform CLI 只有最低版本，没有上限；
-- AWS Provider 被约束在 `5.70.x`；
-- Provider 使用默认配置，没有 alias；
-- LocalStack 测试凭据被直接写入 HCL；
-- 尚未生成 `.terraform/`、`.terraform.lock.hcl`、state 或 plan artifact；
-- 尚未创建任何 bucket。
+这两个 bucket 是必须保留的遗留资源，不允许删除后重新创建。
 
 ---
 
-## Task 1：建立旧版本基线（15 分）
+## 总体限制
 
-在**不修改 Starter**的前提下完成初始化和验证，建立升级前基线。
+以下任一行为会导致本题最高只能得到 60 分：
 
-验收条件：
-
-1. 初始化必须是非交互式的；
-2. `terraform validate` 成功；
-3. 生成 `.terraform.lock.hcl`；
-4. lockfile 中选择的 AWS Provider 必须满足 Starter 的 `5.70.x` 约束；
-5. 此阶段不得运行 apply，也不得创建 bucket。
-
-> 目的：先让 lockfile 真实锁定旧版本，后续才能考查 Provider 升级，而不是只做一次全新安装。
-
-## Task 2：修复 Provider 与版本管理（35 分）
-
-修改 `challenge-16.tf`，满足以下全部要求：
-
-1. Terraform CLI 版本约束必须为 `>= 1.6.0, < 2.0.0`；
-2. AWS Provider source 必须保持为 `hashicorp/aws`；
-3. AWS Provider 版本约束必须升级为 `~> 5.80.0`；
-4. Provider alias 必须为 `localstack`；
-5. `aws_s3_bucket.release_artifact` 必须显式使用 `aws.localstack`；
-6. HCL 中不得包含 `access_key` 或 `secret_key`；认证必须来自环境变量；
-7. 保留 LocalStack 所需的 endpoint、path-style S3 与 validation skip 设置。
-
-然后重新初始化并解决旧 lockfile 与新约束之间的冲突。
-
-验收条件：
-
-- **不得删除旧 lockfile 来绕过升级问题**；
-- 必须使用合适的 `terraform init` 选项更新已锁定的 Provider；
-- 更新后的 lockfile 选择 AWS Provider `5.80.x`；
-- `terraform fmt -check` 与 `terraform validate` 均成功；
-- 配置中不存在明文凭据；
-- 此阶段仍不得创建 bucket。
-
-## Task 3：生成并应用唯一获准的 Saved Plan（25 分）
-
-创建一份非交互式执行计划，并保存为：
-
-```text
-challenge16.tfplan
-```
-
-在 apply 前审阅该 artifact。计划必须只包含一个资源创建动作：
-
-```text
-aws_s3_bucket.release_artifact
-```
-
-验收条件：
-
-1. saved plan 只创建一个 S3 bucket；
-2. 不得包含 replace、delete 或其他资源动作；
-3. 必须 apply 已保存的 `challenge16.tfplan`；
-4. 不得使用无参数 `terraform apply` 重新计算未经审阅的计划；
-5. apply 必须为非交互式。
-
-## Task 4：验证 State、实际资源与收敛（25 分）
-
-apply 完成后，验证 Terraform state 与 LocalStack 中的实际资源。
-
-最终资源必须满足：
-
-- Bucket 名称：`tfpro-c16-release-artifact`
-- `force_destroy = true`
-- Tags：
-  - `Name = tfpro-c16-release-artifact`
-  - `Challenge = 16`
-  - `Environment = exam`
-  - `ManagedBy = terraform`
-
-最终验收条件：
-
-1. state 中只有 `aws_s3_bucket.release_artifact`；
-2. `terraform state show` 显示正确 bucket 与 tags；
-3. AWS CLI 通过 LocalStack endpoint 可以找到该 bucket；
-4. `terraform output -json release_artifact` 返回 bucket ID 与 ARN；
-5. fresh plan 使用 `-detailed-exitcode` 时退出码为 `0`；
-6. `.terraform.lock.hcl` 必须保留，不得作为清理文件删除。
-
-## 可选清理（不计分）
-
-完成所有验收后，可以销毁资源。销毁后应确认：
-
-- Terraform state 中不再有资源；
-- LocalStack 中 bucket 不存在；
-- 保留 `challenge-16.tf` 和 `.terraform.lock.hcl`，删除 plan 与本地 state 产物即可。
+1. 删除遗留 bucket 再让 Terraform 创建；
+2. 使用 `-target` 绕开完整依赖图；
+3. 删除或注释掉任何一个 release target；
+4. 把 `for_each` 改成 `count` 或复制成两组静态资源；
+5. 在 HCL 中保留字面量 `access_key`、`secret_key` 或其他真实/测试凭据；
+6. 保留未设置 alias 的默认 AWS Provider 配置；
+7. 使用无参数 `terraform apply`，而不是应用已审阅的 `release.tfplan`；
+8. 使用 `terraform state rm`、手工编辑 state 或删除 state 逃避修复；
+9. 新增任何持久化源文件或评分脚本。
 
 ---
 
-## 自动判定为不合格的情况
+## Task 1：修复 Provider 版本与初始化（15 分）
 
-出现任意一项，本题视为未达到考试标准：
+最终必须满足：
 
-- 为了升级 Provider 而直接删除 `.terraform.lock.hcl`；
-- HCL 中仍存在 `access_key` 或 `secret_key`；
-- 使用默认 Provider，而不是 `aws.localstack`；
-- apply 时没有使用已审阅的 saved plan；
-- 最终 state 与实际 bucket 不一致；
-- fresh plan 仍有变更；
-- 通过修改 bucket 名称或删除验收 tags 来规避任务。
+- Terraform CLI 约束为 `>= 1.6.0, < 2.0.0`；
+- AWS Provider 允许范围为 `>= 5.80.0, < 5.81.0`；
+- 实际选定版本必须属于 `5.80.x`；
+- 必须通过正常升级流程生成或更新 `.terraform.lock.hcl`；
+- lockfile 必须同时预填充 `windows_amd64` 与 `linux_amd64` 的 Provider package checksum；
+- `terraform fmt -check`、`terraform validate` 均成功。
 
-## 本题不要求的内容
+不要把某个本机下载路径、Provider binary 路径或 schema JSON 当作交付物。
 
-以下内容不属于本题评分范围，不应投入时间：
+## Task 2：重构双 Provider 所有权（15 分）
 
-- 遍历 `.terraform/providers` 中的二进制文件；
-- 解析 `terraform providers schema -json`；
-- 比较 lockfile 的 SHA256 哈希；
-- 在默认 local backend 上演示无实际变化的 `init -reconfigure`；
-- 记忆 Provider plugin 的磁盘缓存路径。
+Root configuration 最终只能有两个 AWS Provider 配置：
+
+- `aws.primary`
+- `aws.audit`
+
+两者必须：
+
+- 使用环境变量认证；
+- region 为 `us-east-1`；
+- S3 和 STS 都连接 `http://localhost:4566`；
+- 支持 LocalStack 所需的验证跳过与 path-style S3；
+- 不产生隐式空的默认 Provider 被资源误用。
+
+Provider 所有权：
+
+- bucket 与 bucket versioning 必须使用 `aws.primary`；
+- manifest、current pointer 和 audit caller identity 必须使用 `aws.audit`；
+- primary caller identity 必须使用 `aws.primary`。
+
+最终配置必须证明两个 Provider 指向同一个 LocalStack account；不得把 account ID 写死。
+
+## Task 3：收紧复杂输入契约（15 分）
+
+`release_targets` 必须继续是驱动所有资源的 `map`，并改为严格类型。每个元素包含：
+
+- `bucket_name`：string
+- `environment`：string
+- `release`：string
+- `retention_days`：number
+- `extra_tags`：map(string)
+
+必须使用 variable validation 同时保证：
+
+- key 只能并且必须恰好为 `dev`、`prod`；
+- 每个元素的 `environment` 与自身 key 完全一致；
+- bucket 名以 `tfpro-c16-` 开头并以 `-artifacts` 结尾；
+- release 符合 `2026.MM.DD-<environment>` 形式；
+- `retention_days` 位于 7–90 天之间。
+
+最终数据必须描述：
+
+| key | bucket | release | retention_days |
+|---|---|---|---:|
+| dev | `tfpro-c16-dev-artifacts` | `2026.07.18-dev` | 14 |
+| prod | `tfpro-c16-prod-artifacts` | `2026.07.18-prod` | 30 |
+
+## Task 4：无损接管遗留 bucket（20 分）
+
+把两个已存在的 bucket 接管到以下稳定资源地址：
+
+```text
+aws_s3_bucket.release["dev"]
+aws_s3_bucket.release["prod"]
+```
+
+要求：
+
+- 不得删除或重建 bucket；
+- 接管后 bucket 必须设置 `force_destroy = true`；
+- 两个 bucket 都启用 versioning；
+- 每个 bucket 最终至少具有这些 tag：
+  - `Name`
+  - `Challenge = "16"`
+  - `Environment`
+  - `Release`
+  - `RetentionDays`
+  - `ManagedBy = "terraform"`
+- `extra_tags` 必须合并进入最终 tags，且不能覆盖上述治理 tag。
+
+评分 agent 会检查资源地址、state lineage、真实 bucket 是否仍存在，以及计划中是否出现 bucket delete/create。
+
+## Task 5：恢复跨 Provider 发布链（15 分）
+
+每个环境都必须创建两个 object：
+
+### Manifest
+
+Key：
+
+```text
+manifests/<release>.json
+```
+
+JSON 至少包含：
+
+- environment
+- release
+- bucket
+- retention_days
+- primary_account_id
+- audit_account_id
+
+### Current pointer
+
+Key：
+
+```text
+channels/current.json
+```
+
+JSON 至少包含：
+
+- environment
+- release
+- manifest_key
+
+额外要求：
+
+- 两类 object 都必须显式使用 `aws.audit`；
+- object 必须使用稳定内容哈希避免永久 drift；
+- current pointer 必须依赖对应 manifest，而不是复制一个可能失配的独立 key；
+- 不能使用 provisioner、`local-exec` 或 AWS CLI 创建 Terraform 应管理的 object。
+
+## Task 6：受控计划与 apply（10 分）
+
+在完成 import 后生成非交互 saved plan：
+
+```text
+release.tfplan
+```
+
+在 apply 前必须审阅 human-readable 和 JSON 两种形式。获准计划应满足：
+
+- **6 个 create**：2 个 bucket versioning + 2 个 manifest + 2 个 current pointer；
+- **2 个 in-place update**：两个已导入 bucket 的 tags；
+- **0 个 delete**；
+- **0 个 replace**；
+- 不得再次 create 两个 bucket；
+- apply 必须使用同一个 `release.tfplan`。
+
+如果 Provider 对空 tag state 的表示导致计划摘要与上述数字存在差异，判分以资源级 action 为准：
+两个 bucket 只能是 `update` 或 `no-op`，绝不能是 `create`、`delete` 或 `replace`。
+
+## Task 7：输出与最终收敛（10 分）
+
+Root output `release_inventory` 必须按 `dev`、`prod` 分组，并至少返回：
+
+- bucket
+- bucket_arn
+- versioning_status
+- manifest_key
+- manifest_etag
+- current_key
+- current_etag
+- primary_account_id
+- audit_account_id
+
+完成 apply 后必须达到：
+
+- state 包含 2 个 caller identity data source、2 个 bucket、2 个 versioning 和 4 个 object；
+- LocalStack 中两个 bucket、四个 object、tags 和 versioning 均真实存在；
+- output 中的值与 state、API 结果一致；
+- fresh full plan 的 `-detailed-exitcode` 为 `0`；
+- `.terraform.lock.hcl` 与 `release.tfplan` 保留供评分 agent 检查。
+
+---
+
+## Agent 判分合同
+
+本题不附带 grader。评分 agent 应独立检查 HCL、lockfile、saved plan JSON、Terraform state、
+output 和 LocalStack API，不接受只凭 README 勾选或终端截图。
+
+建议评分：
+
+- **60 分**：能 init/validate，但仍使用默认 Provider、弱类型或错误资源地址；
+- **75 分**：bucket 已导入且可 apply，但 alias 边界、validation、plan 审阅或 object 内容不完整；
+- **85 分**：state 与真实资源基本正确，无 destroy/recreate，fresh plan 为 0；
+- **95 分**：所有 Provider、import、复杂 validation、saved-plan action 和 output 条件满足；
+- **100 分**：再满足 Windows/Linux 双平台 lockfile checksum，并且 starter 之外没有新增持久源文件。
+
+Agent 应对绕过行为直接扣分，而不是只检查最终对象是否“看起来存在”。
+
+## 清理
+
+评分完成后再执行 destroy。由于 bucket 使用 `force_destroy = true`，Terraform 应能删除其管理的
+objects 和 bucket。不要在评分前清理，也不要通过删除 state 代替 destroy。
