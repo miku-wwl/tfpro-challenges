@@ -1,18 +1,19 @@
 terraform {
-  required_version = ">= 1.6.0, < 2.0.0"
+  required_version = ">= 1.6.0"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "5.80.0"
+      version = "~> 5.70.0"
     }
   }
 }
 
 provider "aws" {
-  region                      = "us-east-1"
-  access_key                  = "test"
-  secret_key                  = "test"
+  region     = "us-east-1"
+  access_key = "test"
+  secret_key = "test"
+
   skip_credentials_validation = true
   skip_metadata_api_check     = true
   skip_region_validation      = true
@@ -25,21 +26,22 @@ provider "aws" {
   }
 }
 
-resource "aws_s3_bucket" "plugin_probe" {
-  bucket        = "tfpro-c16-plugin-probe"
+resource "aws_s3_bucket" "release_artifact" {
+  bucket        = "tfpro-c16-release-artifact"
   force_destroy = true
 
   tags = {
-    Name      = "tfpro-c16-plugin-probe"
-    Challenge = "16"
-    Purpose   = "provider-plugin-inspection"
+    Name        = "tfpro-c16-release-artifact"
+    Challenge   = "16"
+    Environment = "exam"
+    ManagedBy   = "terraform"
   }
 }
 
-output "plugin_probe" {
-  description = "A small real object used after provider initialization succeeds."
+output "release_artifact" {
+  description = "Identity of the release artifact bucket."
   value = {
-    bucket = aws_s3_bucket.plugin_probe.id
-    arn    = aws_s3_bucket.plugin_probe.arn
+    bucket = aws_s3_bucket.release_artifact.id
+    arn    = aws_s3_bucket.release_artifact.arn
   }
 }
