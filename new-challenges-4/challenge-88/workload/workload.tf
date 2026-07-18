@@ -41,3 +41,23 @@ import {
 
 # Task 3 generates a temporary resource block. Task 4 curates it to a minimal,
 # stable aws_instance.managed configuration and adds the final output.
+
+resource "aws_instance" "managed" {
+  ami           = "ami-04681a1dbd79675a5"
+  instance_type = "t2.micro"
+
+  tags = {
+    Name      = "tfpro-challenge88-imported"
+    Challenge = "88"
+    Owner     = "legacy-platform"
+  }
+}
+
+output "managed_instance" {
+  value = {
+    id            = aws_instance.managed.id
+    ami           = aws_instance.managed.ami
+    instance_type = aws_instance.managed.instance_type
+    name          = aws_instance.managed.tags["Name"]
+  }
+}
