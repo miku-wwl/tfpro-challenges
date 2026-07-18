@@ -1,0 +1,44 @@
+terraform {
+  required_version = ">= 1.6.0, < 2.0.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "5.80.0"
+    }
+  }
+}
+
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  s3_use_path_style           = true
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  endpoints {
+    s3  = "http://localhost:4566"
+    sts = "http://localhost:4566"
+  }
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket" "plugin_probe" {
+  bucket        = "tfpro-c46-plugin-probe"
+  force_destroy = true
+
+  tags = {
+    Challenge = "46"
+    Purpose   = "provider-plugin-inspection"
+  }
+}
+
+output "starter_contract" {
+  value = {
+    account_id = data.aws_caller_identity.current.account_id
+    bucket     = aws_s3_bucket.plugin_probe.id
+  }
+}
