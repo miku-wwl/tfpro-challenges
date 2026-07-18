@@ -82,6 +82,12 @@ terraform plan
 预期错误计划显示两个旧数字地址删除、两个新业务键地址创建。真实实例参数虽然相同，
 Terraform 仍把不同地址视为不同实例。停止，不要 apply。
 
+> **Note（☆）**：`for_each` 创建的 resource 实例集合是 map，可以像普通 map 一样使用
+> `for key, value in aws_instance.node` 遍历；`key` 是 `api`/`worker`，`value` 是对应的
+> resource instance。使用 `count` 时集合按数字索引组织，通常使用
+> `for index, instance in aws_instance.node`。因此：`for_each resource → map → key/value`，
+> `count resource → tuple → index/value`。
+
 ### Task 3：声明两条精确地址迁移
 
 在根模块加入两个静态 `moved` blocks：

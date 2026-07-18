@@ -23,27 +23,40 @@ provider "aws" {
 }
 
 locals {
-  node_names = ["api", "worker"]
+  nodes = {
+    worker = "worker"
+    api    = "api"
+  }
 }
 
 # Apply this count-based baseline before changing its instance addresses.
 resource "aws_instance" "node" {
-  count = length(local.node_names)
+  for_each = local.nodes
 
   ami           = "ami-04681a1dbd79675a5"
   instance_type = "t2.micro"
 
   tags = {
-    Name      = "tfpro-challenge87-${local.node_names[count.index]}"
+    Name      = "tfpro-challenge87-${each.key}"
     Challenge = "87"
-    Service   = local.node_names[count.index]
+    Service   = each.value
   }
+}
+
+moved {
+  from = aws_instance.node[0]
+  to   = aws_instance.node["api"]
+}
+
+moved {
+  from = aws_instance.node[1]
+  to   = aws_instance.node["worker"]
 }
 
 output "fleet_contract" {
   description = "The business-keyed view must survive the address migration."
   value = {
-    for index, instance in aws_instance.node : local.node_names[index] => {
+    for name, instance in aws_instance.node : name => {
       id   = instance.id
       name = instance.tags.Name
     }
