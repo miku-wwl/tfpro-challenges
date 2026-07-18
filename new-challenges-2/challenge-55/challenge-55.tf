@@ -18,13 +18,14 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    ec2 = "http://localhost:4566"
-    sts = "http://localhost:4566"
+    autoscaling = "http://localhost:4566"
+    ec2         = "http://localhost:4566"
+    sts         = "http://localhost:4566"
   }
 }
 
 variable "desired_capacity" {
-  description = "Runtime surrogate for the ASG desired-capacity lifecycle exercise."
+  description = "Desired capacity managed by the real Auto Scaling Group."
   type        = number
   default     = 1
 
@@ -91,20 +92,47 @@ resource "aws_launch_template" "fleet" {
     resource_type = "instance"
     tags = {
       Challenge = "55"
-      Fleet     = "schema-drill"
+      Fleet     = "tfpro-c55-fleet"
     }
   }
 }
 
-resource "terraform_data" "desired_capacity" {
-  input = var.desired_capacity
+resource "aws_autoscaling_group" "fleet" {
+  name                      = "tfpro-c55-fleet"
+  min_size                  = 1
+  max_size                  = 4
+  desired_capacity          = var.desired_capacity
+  vpc_zone_identifier       = [data.aws_subnet.selected.id]
+  health_check_type         = "EC2"
+  health_check_grace_period = 300
+  wait_for_capacity_timeout = "2m"
+
+  launch_template {
+    id      = aws_launch_template.fleet.id
+    version = tostring(aws_launch_template.fleet.latest_version)
+  }
+
+  tag {
+    key                 = "Challenge"
+    value               = "55"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Fleet"
+    value               = "tfpro-c55-fleet"
+    propagate_at_launch = true
+  }
 }
 
-output "starter_contract" {
+output "fleet_contract" {
   value = {
+    autoscaling_group  = aws_autoscaling_group.fleet.name
+    min_size           = aws_autoscaling_group.fleet.min_size
+    desired_capacity   = aws_autoscaling_group.fleet.desired_capacity
+    max_size           = aws_autoscaling_group.fleet.max_size
     launch_template_id = aws_launch_template.fleet.id
     security_group_id  = aws_security_group.fleet.id
     subnet_id          = data.aws_subnet.selected.id
-    desired_capacity   = terraform_data.desired_capacity.output
   }
 }

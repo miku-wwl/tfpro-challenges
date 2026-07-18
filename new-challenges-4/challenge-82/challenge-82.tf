@@ -1,4 +1,5 @@
 terraform {
+  required_version = ">= 1.6.0, < 2.0.0"
 
   required_providers {
     aws = {
@@ -7,6 +8,7 @@ terraform {
     }
   }
 }
+
 provider "aws" {
   region                      = "us-east-1"
   access_key                  = "test"
@@ -16,8 +18,9 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    ec2 = "http://localhost:4566"
-    sts = "http://localhost:4566"
+    autoscaling = "http://localhost:4566"
+    ec2         = "http://localhost:4566"
+    sts         = "http://localhost:4566"
   }
 }
 
@@ -41,6 +44,18 @@ data "aws_ami" "selected" {
   }
 }
 
+data "aws_subnet" "selected" {
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1a"]
+  }
+
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
+}
+
 locals {
   block_devices = {
     for device_name, device in var.block_devices : device_name => {
@@ -59,7 +74,7 @@ locals {
 }
 
 resource "aws_launch_template" "release" {
-  name                   = "tfpro-c82-release"
+  name                   = var.resource_name
   image_id               = data.aws_ami.selected.id
   instance_type          = "t3.micro"
   update_default_version = true
@@ -83,6 +98,38 @@ resource "aws_launch_template" "release" {
     Challenge = "82"
     ManagedBy = "Terraform"
   }
+
+  lifecycle {
+    ignore_changes = [tag_specifications]
+  }
+}
+
+resource "aws_autoscaling_group" "release" {
+  name                      = var.resource_name
+  min_size                  = 1
+  desired_capacity          = 1
+  max_size                  = 2
+  vpc_zone_identifier       = [data.aws_subnet.selected.id]
+  health_check_type         = "EC2"
+  health_check_grace_period = 300
+  wait_for_capacity_timeout = "2m"
+
+  launch_template {
+    id      = aws_launch_template.release.id
+    version = tostring(aws_launch_template.release.latest_version)
+  }
+
+  tag {
+    key                 = "Challenge"
+    value               = "82"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "ManagedBy"
+    value               = "Terraform"
+    propagate_at_launch = true
+  }
 }
 
 output "launch_template_contract" {
@@ -96,5 +143,13 @@ output "launch_template_contract" {
       for device_name in sort(keys(local.block_devices)) :
       local.block_devices[device_name]
     ]
+    autoscaling_group = {
+      arn              = aws_autoscaling_group.release.arn
+      name             = aws_autoscaling_group.release.name
+      min_size         = aws_autoscaling_group.release.min_size
+      desired_capacity = aws_autoscaling_group.release.desired_capacity
+      max_size         = aws_autoscaling_group.release.max_size
+      subnet_ids       = aws_autoscaling_group.release.vpc_zone_identifier
+    }
   }
 }
